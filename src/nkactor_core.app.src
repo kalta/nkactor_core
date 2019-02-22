@@ -1,0 +1,14 @@
+{application, nkactor_core, [
+    {description, "Actor Core Framework"},
+    {vsn, "develop"},
+    {modules, []},
+    {registered, []},
+    {mod, {nkactor_core_app, []}},
+    {applications, [
+        pbkdf2,
+        hackney,
+        nkactor
+    ]},
+    {env, [
+    ]}
+]}.
