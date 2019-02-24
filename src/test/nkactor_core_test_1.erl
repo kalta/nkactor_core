@@ -72,7 +72,7 @@ basic_test() ->
     {error, actor_not_found} = req(#{verb=>get, resource=>users, name=>ut1}),
     {error, verb_not_allowed} = req(#{verb=>get1, resource=>users, name=>ut1}),
     {error, resource_invalid} = req(#{verb=>get, resource=>users2, name=>ut1}),
-
+%%
     % Create an user
     U1 = #{
         group => core,
@@ -113,12 +113,17 @@ basic_test() ->
 
 
     % The actor is loaded
-    {true, my_actors, #actor_id{name = <<"ut1">>, pid=Pid1}= ActorId1} = nkactor_namespace:find_registered(UID),
+    {true, my_actors, #actor_id{name = <<"ut1">>, pid=Pid1}= ActorId1} = nkactor_namespace:find_actor(UID),
     true = is_pid(Pid1),
     {ok, ActorId1} = nkactor:find(ActorId1),
     {ok, ActorId1} = nkactor:find(UID),
     {ok, Path1} = nkactor:get_path(UID),
     {ok, ActorId1} = nkactor:find(Path1),
+    {ok, ActorId1} = nkactor:find(<<"users:ut1.test.my_actors">>),
+    {error, actor_not_found} = nkactor:find(<<"users:ut2.test.my_actors">>),
+    {error, actor_not_found} = nkactor:find(<<"users2:ut1.test.my_actors">>),
+    {ok, ActorId1} = nkactor:find(<<"ut1.test.my_actors">>),
+    {error, actor_not_found} = nkactor:find(<<"ut2.test.my_actors">>),
     {ok, Actor1} = nkactor:get_actor(Path1),
     {ok, Actor1} = req(#{verb=>get, uid=>UID}),
     {ok, Actor1} = req(#{verb=>get, resource=>"users", name=>"ut1"}),
@@ -127,7 +132,7 @@ basic_test() ->
     % Let's work with the actor while unloaded
     ok = nkactor:stop(Pid1),
     timer:sleep(100),
-    false = nkactor_namespace:find_registered(UID),
+    false = nkactor_namespace:find_actor(UID),
     false = is_process_alive(Pid1),
     ActorId1b = ActorId1#actor_id{pid=undefined},
     {ok, ActorId1b} = nkactor:find(ActorId1),
@@ -138,15 +143,15 @@ basic_test() ->
     {ok, Actor2} = nkactor:get_actor(Path1, #{activate=>false}),
     {ok, Actor2} = req(#{verb=>get, uid=>UID, params=>#{activate=>false}}),
     {ok, Actor2} = req(#{verb=>get, resource=>users, name=>ut1, params=>#{activate=>false}}),
-    false = nkactor_namespace:find_registered(UID),
+    false = nkactor_namespace:find_actor(UID),
 
     % Load with TTL
     {ok, Actor1} = req(#{verb=>get, resource=>users, name=>ut1, params=>#{ttl=>500}}),
     timer:sleep(50),
-    {true, my_actors, #actor_id{pid=Pid2}} = nkactor_namespace:find_registered(UID),
+    {true, my_actors, #actor_id{pid=Pid2}} = nkactor_namespace:find_actor(UID),
     true = Pid1 /= Pid2,
     timer:sleep(600),
-    false = nkactor_namespace:find_registered(UID),
+    false = nkactor_namespace:find_actor(UID),
 
     % Delete the user
     {error, actor_not_found} = req(#{verb=>delete, resource=>users, name=>"utest1"}),
@@ -154,188 +159,125 @@ basic_test() ->
     ok.
 
 
-%%activation_test() ->
-%%    U1 = yaml(<<"
-%%        apiVersion: core/v1a1
-%%        kind: User
-%%        spec:
-%%            password: pass1
-%%        metadata:
-%%            name: ut1
-%%            domain: root
-%%    ">>),
-%%
-%%    % Invalid fields
-%%    {error, #{<<"code">>:=400, <<"reason">>:=<<"field_invalid">>, <<"details">>:=#{<<"field">>:=<<"metadata.name">>}}} =
-%%        req(#{verb=>create, resource=>users, name=>"utest1", body=>U1}),
-%%    {400, #{<<"code">>:=400, <<"reason">>:=<<"field_invalid">>, <<"details">>:=#{<<"field">>:=<<"metadata.name">>}}} =
-%%        http_put("/users/utest1", U1),
-%%    {error, #{<<"code">>:=404, <<"reason">>:=<<"domain_unknown">>, <<"details">>:=#{<<"domain">>:=<<"domain1">>}}} =
-%%        req(#{verb=>create, resource=>users, domain=>domain1, name=>"ut1", body=>U1}),
-%%    {404, #{<<"code">>:=404, <<"reason">>:=<<"domain_unknown">>, <<"details">>:=#{<<"domain">>:=<<"domain1">>}}} =
-%%        http_put("/domains/domain1/users/ut1", U1),
-%%    {error, #{<<"code">>:=400, <<"reason">>:=<<"field_invalid">>, <<"details">>:=#{<<"field">>:=<<"kind">>}}} =
-%%        req(#{verb=>create, resource=>users, name=>"utest1", body=>U1#{<<"kind">>:=<<"Contact">>}}),
-%%    {error, #{<<"code">>:=400, <<"reason">>:=<<"field_invalid">>, <<"details">>:=#{<<"field">>:=<<"kind">>}}} =
-%%        req(#{verb=>create, resource=>users, name=>"utest1", body=>U1#{<<"kind">>:=<<"None">>}}),
-%%    {error, #{<<"code">>:=400, <<"reason">>:=<<"field_invalid">>, <<"details">>:=#{<<"field">>:=<<"apiVersion">>}}} =
-%%        req(#{verb=>create, resource=>users, name=>"utest1", body=>U1#{<<"apiVersion">>:=<<"none">>}}),
-%%
-%%    req(#{verb=>delete, resource=>users, name=>"ut1"}),
-%%
-%%    % Create object without activation
-%%    {201, Add1} = http_post("/users?activate=false", U1),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"User">>,
-%%        <<"metadata">> := #{
-%%            creation_time := Time,
-%%            <<"domain">> := <<"root">>,
-%%            <<"generation">> := 0,
-%%            <<"name">> := <<"ut1">>,
-%%            hash := _Vsn2,
-%%            <<"uid">> := UID1,
-%%            update_time := Time
-%%        },
-%%        spec := #{<<"password">> := <<>>}
-%%        % <<"status">> := #{}
-%%    } = Add1,
-%%    false = nkactor_namespace:find_registered(UID1),
-%%    % Delete not-activated object
-%%    {200, #{<<"code">>:=200, <<"reason">>:=<<"actor_deleted">>}} = http_delete("/users/ut1"),
-%%
-%%    % Create with TTL
-%%    {201, #{<<"metadata">>:=#{<<"uid">>:=UID2}}} = http_post("/users?ttl=500", U1),
-%%    {true, _} = nkservice_actor_db:is_activated(UID2),
-%%
-%%    timer:sleep(600),
-%%    false = nkservice_actor_db:is_activated(UID2),
-%%    {200, #{<<"code">>:=200, <<"reason">>:=<<"actor_deleted">>}} = http_delete("/users/ut1"),
-%%    nkdomain_api_events:wait_for_save(),
-%%    {200, #{<<"details">>:=#{<<"deleted">>:=N}}} = http_delete("/events?fieldSelector=involvedObject.name:ut1"),
-%%    true = N >= 4,
-%%    ok.
-%%
-%%
-%%subdomains_test() ->
-%%    #{d1:=D1, d2:=D2, d3:=D3, u1:=U1} = nkactor_core_test_util:test_data(),
-%%    % Unload admin user
-%%    nkactor:stop("/root/core/users/admin"),
-%%
-%%    % Get the UUID for the root domain
-%%    {ok, 'nkdomain-root', RootUID} = nkdomain_register:get_domain_data('nkdomain-root', "root"),
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=RootUID}}} = req(#{resource=>"domains", name=>"root"}),
-%%
-%%    % Create "a-nktest" domain
-%%    {created, AddD1} = req(#{verb=>create, resource=>domains, name=>"a-nktest", body=>D1}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"Domain">>,
-%%        <<"metadata">> := #{
-%%            <<"domain">> := <<"root">>,
-%%            <<"name">> := <<"a-nktest">>,
-%%            <<"uid">> := A_UID,
-%%            <<"links">> := #{RootUID:=<<"io.netc.core.domain">>}
-%%        }
-%%    } = AddD1,
-%%
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=A_UID}}} = req(#{resource=>"domains", name=>"a-nktest"}),  % GET /apis/core/v1/domains/root/domains/a-nktest
-%%    {200, #{<<"metadata">>:=#{<<"uid">>:=A_UID}}} = http_get("/domains/root/domains/a-nktest"),
-%%    #{<<"domains">>:=1} = get_counter("root"), % a-nktest
-%%
-%%    % Create a second-level domain "b.a-nktest" domain
-%%    {created, AddD2} = req(#{verb=>create, domain=>"a-nktest", resource=>"domains", name=>"b", body=>D2}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"Domain">>,
-%%        <<"metadata">> := #{
-%%            <<"domain">> := <<"a-nktest">>,
-%%            <<"name">> := <<"b">>,
-%%            <<"uid">> := B_A_UID,
-%%            <<"links">> := #{A_UID:=<<"io.netc.core.domain">>}
-%%        }
-%%    } = AddD2,
-%%
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=B_A_UID}}} = req(#{domain=>"a-nktest", resource=>"domains", name=>"b"}),
-%%    {200, #{<<"metadata">>:=#{<<"uid">>:=B_A_UID}}} = http_get("/domains/a-nktest/domains/b"),
-%%    #{<<"domains">>:=2} = get_counter("root"),          % a, b.a-nktest
-%%    #{<<"domains">>:=1} = get_counter("a-nktest"),      % b.a-nktest
-%%
-%%    % Create a third-level domain "c.b.a-nktest"
-%%    {created, AddD3} = req(#{verb=>create, domain=>"b.a-nktest", resource=>"domains", name=>"c", body=>D3}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"Domain">>,
-%%        <<"metadata">> := #{
-%%            <<"domain">> := <<"b.a-nktest">>,
-%%            <<"name">> := <<"c">>,
-%%            <<"uid">> := C_B_A_UID
-%%        }
-%%    } = AddD3,
-%%    [_B_A_UID] = get_linked_uids(<<"io.netc.core.domain">>, AddD3),
-%%
-%%    {true, _} = nkdomain_register:is_domain_active("c.b.a-nktest"),
-%%
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=C_B_A_UID}}} = req(#{domain=>"b.a-nktest", resource=>"domains", name=>"c"}),
-%%    {200, #{<<"metadata">>:=#{<<"uid">>:=C_B_A_UID}}} = http_get("/domains/b.a-nktest/domains/c"),
-%%    #{<<"domains">>:=3} = get_counter("root"),          % a, b.a-nktest, c.b.a-nktest
-%%    #{<<"domains">>:=2} = get_counter("a-nktest"),      % b.a-nktest, c.b.a-nktest
-%%    #{<<"domains">>:=1} = get_counter("b.a-nktest"),    % c.b.a-nktest
-%%
-%%    % If we unload the actor, the service will stop
-%%    nkactor:stop("/b.a-nktest/core/domains/c"),
-%%    timer:sleep(100),
-%%    false = nkdomain_register:is_domain_active("c.b.a-nktest"),
-%%
-%%    % When we reload it, it will be started again
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=C_B_A_UID}}} = req(#{domain=>"b.a-nktest", resource=>"domains", name=>"c"}),  % GET /.../domains/c
-%%    {true, _} = nkdomain_register:is_domain_active("c.b.a-nktest"),
-%%
-%%    % Add an user on "b.a-nktest"
-%%    {created, AddU1} = req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut1", body=>U1}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"User">>,
-%%        <<"metadata">> := #{
-%%            <<"uid">> := U1_UID,
-%%            <<"domain">> := <<"b.a-nktest">>,
-%%            <<"name">> := <<"ut1">>,
-%%            <<"links">> := #{B_A_UID:=<<"io.netc.core.domain">>}
-%%        }
-%%    } = AddU1,
-%%
-%%    {200, #{<<"metadata">>:=#{<<"uid">>:=U1_UID}}} = http_get("/domains/b.a-nktest/users/ut1"),
-%%    #{<<"domains">>:=3, <<"users">>:=1} = get_counter("root"),
-%%    #{<<"domains">>:=2, <<"users">>:=1} = get_counter("a-nktest"),
-%%    #{<<"domains">>:=1, <<"users">>:=1} = get_counter("b.a-nktest"),
-%%
-%%    {true, _} = nkservice_actor_db:is_activated(A_UID),
-%%    {true, _} = nkservice_actor_db:is_activated(B_A_UID),
-%%    {true, _} = nkservice_actor_db:is_activated(C_B_A_UID),
-%%    {true, _} = nkservice_actor_db:is_activated(U1_UID),
-%%    {true, _} = nkservice_actor_db:is_activated("/root/core/domains/a-nktest"),
-%%    {true, _} = nkservice_actor_db:is_activated("/a-nktest/core/domains/b"),
-%%    {true, _} = nkservice_actor_db:is_activated("/b.a-nktest/core/domains/c"),
-%%    {true, _} = nkservice_actor_db:is_activated("/b.a-nktest/core/users/ut1"),
-%%
-%%    % Delete all
-%%    % We cannot delete b.a-nktest
-%%    {422, #{<<"reason">>:= <<"actor_has_linked_actors">>}} = http_delete("/domains/a-nktest/domains/b"),
-%%    {200, _} = http_delete("/domains/b.a-nktest/domains/c"),
-%%    timer:sleep(50),
-%%    false = nkservice_actor_db:is_activated(C_B_A_UID),
-%%    {422, #{<<"reason">>:= <<"actor_has_linked_actors">>}} = http_delete("/domains/a-nktest/domains/b"),
-%%    {200, _} = http_delete("/domains/b.a-nktest/users/ut1"),
-%%    timer:sleep(50),
-%%    false = nkservice_actor_db:is_activated(U1_UID),
-%%    {200, _} = http_delete("/domains/a-nktest/domains/b"),
-%%    timer:sleep(50),
-%%    false = nkservice_actor_db:is_activated(B_A_UID),
-%%    {200, _} = http_delete("/domains/root/domains/a-nktest"),
-%%    timer:sleep(50),
-%%    false = nkservice_actor_db:is_activated(A_UID),
-%%    #{<<"domains">>:=0} = get_counter("root"), % "root"
-%%    ok.
+activation_test() ->
+    U1 = #{
+        group => core,
+        resource => users,
+        name => ut1,
+        namespace => <<"test.my_actors">>,
+        data => #{
+            spec => #{password => pass1}
+        }
+    },
+
+    % Invalid fields
+    {error, {field_invalid, <<"name">>}} =
+        req(#{verb=>create, resource=>users, name=>"utest1", body=>U1}),
+    {error,{namespace_not_found,<<"domain1">>}} =
+        req(#{verb=>create, resource=>users, namespace=>domain1, name=>"ut1", body=>U1}),
+    {error, {field_invalid, <<"group">>}} =
+        req(#{verb=>create, resource=>users, name=>"utest1", body=>U1#{group=>core2}}),
+    {error, {field_invalid, <<"resource">>}} =
+        req(#{verb=>create, resource=>users, name=>"utest1", body=>U1#{resource=>users2}}),
+
+    req(#{verb=>delete, resource=>users, name=>"ut1"}),
+
+    % Create object without activation
+    {ok, Actor1} = nkactor:create(U1, #{activate=>false}),
+    #{
+        group := <<"core">>,
+        resource := <<"users">>,
+        name := <<"ut1">>,
+        namespace := <<"test.my_actors">>,
+        data := #{
+            spec := #{password := _}
+        },
+        uid := UID1,
+        metadata := #{
+            vsn := <<"0">>,
+            creation_time := Time,
+            generation := 0,
+            hash := _Vsn2,
+            update_time := Time
+        }
+    } = Actor1,
+    false = nkactor_namespace:find_actor(UID1),
+    % Delete not-activated object
+    ok = nkactor:delete(<<"core:users:ut1.test.my_actors">>),
+
+    % Create with TTL
+    {ok, #{uid:=UID2}} = nkactor:create(U1, #{ttl=>500}),
+    {true, my_actors, _} = nkactor_namespace:find_actor(UID2),
+
+    timer:sleep(600),
+    false = nkactor_namespace:find_actor(UID2),
+    ok = nkactor:delete("ut1.test.my_actors").
+
+
+
+namespaces_test() ->
+    % Delete all and stop namespaces
+    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}, #{}),
+    nkactor_namespace:stop_namespace(<<"c.b.a.test.my_actors">>, normal),
+    nkactor_namespace:stop_namespace(<<"a.test.my_actors">>, normal),
+    timer:sleep(50),
+
+    [{<<"my_actors">>, my_actors, _}] = nkactor_master:get_all_namespaces(<<>>),
+    [{<<"my_actors">>, my_actors, _}] = nkactor_master:get_all_namespaces("my_actors"),
+    [] = nkactor_master:get_all_namespaces("my_actors2"),
+
+    % Create a config at "c.b.a.test.my_actors"
+    {created, _} = req(#{verb=>create, resource=>configmaps, name=>config_c, namespace=>'c.b.a.test.my_actors'}),
+    #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters(<<>>),
+    true = map_size(nkactor_namespace:get_counters("my_actors2")) == 0,
+    #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("my_actors"),
+    #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("a.test.my_actors"),
+    #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("b.a.test.my_actors"),
+    #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("c.b.a.test.my_actors"),
+    true = map_size(nkactor_namespace:get_counters("d.c.b.a.test.my_actors")) == 0,
+
+    {created, _} = req(#{verb=>create, resource=>configmaps, name=>config_a, namespace=>'a.test.my_actors'}),
+    #{<<"core:configmaps">>:=2} = nkactor_namespace:get_counters(<<>>),
+    #{<<"core:configmaps">>:=2} = nkactor_namespace:get_counters("my_actors"),
+    #{<<"core:configmaps">>:=2} = nkactor_namespace:get_counters("a.test.my_actors"),
+    #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("b.a.test.my_actors"),
+    #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("c.b.a.test.my_actors"),
+
+    [
+        {<<"my_actors">>, my_actors, _},
+        {<<"a.test.my_actors">>, my_actors, _},
+        {<<"c.b.a.test.my_actors">>, my_actors, _}
+    ] = nkactor_master:get_all_namespaces(<<>>),
+    [
+        {<<"my_actors">>, my_actors, _},
+        {<<"a.test.my_actors">>, my_actors, _},
+        {<<"c.b.a.test.my_actors">>, my_actors, _}
+    ] = nkactor_master:get_all_namespaces("my_actors"),
+    [
+        {<<"a.test.my_actors">>, my_actors, _},
+        {<<"c.b.a.test.my_actors">>, my_actors, _}
+    ] = nkactor_master:get_all_namespaces("test.my_actors"),
+
+    {true, _, #actor_id{pid=C1}} = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
+    {ok, my_actors, NS1} = nkactor_namespace:get_namespace("c.b.a.test.my_actors"),
+    % If the namespace is killed, or stopped with anything other than 'normal' the actor re-registers with it, restarting it
+    ok = nkactor_namespace:stop_namespace("c.b.a.test.my_actors", my_stop),
+    timer:sleep(50),
+    {true, _, #actor_id{pid=C1}} = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
+    {ok, my_actors, NS2} = nkactor_namespace:get_namespace("c.b.a.test.my_actors"),
+    true = NS1 /= NS2,
+    % If it is stopped,
+    ok = nkactor_namespace:stop_namespace("c.b.a.test.my_actors", normal),
+    timer:sleep(50),
+    false = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
+    {ok, my_actors, NS3} = nkactor_namespace:get_namespace("c.b.a.test.my_actors"),
+    true = NS2 /= NS3,
+
+
+
+    ok.
+
+
 %%
 %%
 %%loading_test() ->
@@ -1413,8 +1355,3 @@ basic_test() ->
 %%%% Util
 %%%% ===================================================================
 %%
-%%
-%%get_counter(Domain) ->
-%%    {ok, Count} = nkdomain_register:get_group_counters(Domain, ?GROUP_CORE),
-%%    Count.
-

@@ -46,6 +46,10 @@ create_test_data() ->
     ok.
 
 
+d2() ->
+    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}, #{}).
+
+
 delete_test_data() ->
 
     % First delete the events (potentially a lot) without transactions:
@@ -126,7 +130,7 @@ req(Api) ->
         auth => #{token=>?TOKEN},
         namespace => ?NS
     },
-    case nkactor:request(maps:merge(Base, Api)) of
+    case nkactor_request:request(maps:merge(Base, Api)) of
         {ok, Reply, _} ->
             {ok, Reply};
         {status, Status, _} ->
