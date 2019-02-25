@@ -35,19 +35,18 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 create_test_data() ->
+    d2(),
     #{d1:=D1, d2:=D2, d3:=D3, u1:=U1} = test_data(),
-    delete_test_data(),
-    % Create domains
-    {created, _} = req(#{verb=>create, resource=>domains, name=>"a-nktest", body=>D1}),
-    {created, _} = req(#{verb=>create, domain=>"a-nktest", resource=>"domains", name=>"b", body=>D2}),
-    {created, _} = req(#{verb=>create, domain=>"b.a-nktest", resource=>"domains", name=>"c", body=>D3}),
-    {created, _} = req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut1", body=>U1}),
-    nkdomain_api_events:wait_for_save(),
+    % delete_test_data(),
+    {created, _} = req(#{verb=>create, body=>D1}),
+    {created, _} = req(#{verb=>create, body=>D2}),
+    {created, _} = req(#{verb=>create, body=>D3}),
+    {created, _} = req(#{verb=>create, body=>U1}),
     ok.
 
 
 d2() ->
-    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}, #{}).
+    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}).
 
 
 delete_test_data() ->
@@ -65,72 +64,69 @@ delete_test_data() ->
 
 
 test_data() ->
-    D1 = yaml(<<"
-        apiVersion: core/v1a1
-        kind: Domain
-        spec:
-            httpPool:
-                maxConnections: 25
-                timeout: 60000
-        metadata:
-            name: a-nktest
-            domain: root
-            labels:
-                is_a-nktest_domain: true
-            fts:
-                fts_domain: 'Domáin a-nktest'
-    "/utf8>>),
-    D2 = yaml(<<"
-        apiVersion: core/v1a1
-        kind: Domain
-        metadata:
-            name: b
-            domain: a-nktest
-            labels:
-                is_a-nktest_domain: true
-                is_b_domain: true
-            fts:
-                fts_domain: 'Domáin b'
-    "/utf8>>),
-    D3 = yaml(<<"
-        apiVersion: core/v1a1
-        kind: Domain
-        metadata:
-            name: c
-            domain: b.a-nktest
-            labels:
-                is_a-nktest_domain: true
-                is_b_domain: true
-                is_c_domain: true
-            fts:
-                fts_domain: 'Domáin c'
-    "/utf8>>),
-    U1 = yaml(<<"
-        apiVersion: core/v1a1
-        kind: User
-        spec:
-            password: pass1
-        metadata:
-            name: ut1
-            domain: b.a-nktest
-            labels:
-                is_a-nktest_domain: true
-                is_b_domain: true
-            fts:
-                fts_name: 'Úser MY name'
-    "/utf8>>),
+    D1 = #{
+        resource => configmaps,
+        name => ca,
+        namespace => 'a.test.my_actors',
+        metadata => #{
+            labels => #{is_a => true},
+            fts => #{fts_class => <<"Domáin a"/utf8>>}
+        }
+    },
+    D2 = #{
+        resource => configmaps,
+        name => cb,
+        namespace => 'b.a.test.my_actors',
+        metadata => #{
+            links => #{'ca.a.test.my_actors' => my_link},
+            labels => #{
+                is_a => true,
+                is_b => true
+            },
+            fts => #{fts_class => <<"Domáin b"/utf8>>}
+        }
+    },
+    D3= #{
+        resource => configmaps,
+        name => cc,
+        namespace => 'c.b.a.test.my_actors',
+        metadata => #{
+            links => #{'cb.b.a.test.my_actors' => my_link},
+            labels => #{
+                is_a => true,
+                is_b => true,
+                is_c => true
+            },
+            fts => #{fts_class => <<"Domáin c"/utf8>>}
+        }
+    },
+    U1 = #{
+        resource => users,
+        name => ut1,
+        namespace => 'b.a.test.my_actors',
+        data => #{spec => #{password => pass1}},
+        metadata=> #{
+            links => #{'cb.b.a.test.my_actors' => my_link},
+            labels => #{
+                is_a => true,
+                is_b => true
+            },
+            fts => #{fts_name => <<"Úser MY name"/utf8>>}
+        }
+    },
     #{d1=>D1, d2=>D2, d3=>D3, u1=>U1}.
 
 
 
 
-req(Api) ->
+req(Req) ->
     Base = #{
         group => ?GROUP_CORE,
         auth => #{token=>?TOKEN},
         namespace => ?NS
     },
-    case nkactor_request:request(maps:merge(Base, Api)) of
+    Req2 = maps:merge(Base, Req),
+    case nkactor_request:request(Req2) of
         {ok, Reply, _} ->
             {ok, Reply};
         {status, Status, _} ->

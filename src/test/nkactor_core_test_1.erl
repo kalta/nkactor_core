@@ -217,7 +217,7 @@ activation_test() ->
 
 namespaces_test() ->
     % Delete all and stop namespaces
-    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}, #{}),
+    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}),
     nkactor_namespace:stop_namespace(<<"c.b.a.test.my_actors">>, normal),
     nkactor_namespace:stop_namespace(<<"a.test.my_actors">>, normal),
     timer:sleep(50),
@@ -272,260 +272,82 @@ namespaces_test() ->
     false = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
     {ok, my_actors, NS3} = nkactor_namespace:get_namespace("c.b.a.test.my_actors"),
     true = NS2 /= NS3,
-
-
-
     ok.
 
 
-%%
-%%
-%%loading_test() ->
-%%    #{d1:=D1, d2:=D2, d3:=D3, u1:=U1} = nkactor_core_test_util:test_data(),
-%%
-%%    % Create them again
-%%    {error, #{<<"reason">>:=<<"domain_unknown">>}} = req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut1", body=>U1}),
-%%    {created, _} = req(#{verb=>create, resource=>domains, name=>"a-nktest", body=>D1}),
-%%    {created, _} = req(#{verb=>create, domain=>"a-nktest", resource=>"domains", name=>"b", body=>D2}),
-%%    {created, _} = req(#{verb=>create, domain=>"b.a-nktest", resource=>"domains", name=>"c", body=>D3}),
-%%    {created, _} = req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut1", body=>U1}),
-%%    {true, _} = nkservice_actor_db:is_activated("/root/core/domains/a-nktest"),
-%%    {true, _} = nkservice_actor_db:is_activated("/a-nktest/core/domains/b"),
-%%    {true, _} = nkservice_actor_db:is_activated("/b.a-nktest/core/domains/c"),
-%%    {true, _} = nkservice_actor_db:is_activated("/b.a-nktest/core/users/ut1"),
-%%    #{<<"domains">>:=3, <<"users">>:=1} = get_counter("root"),
-%%    #{<<"domains">>:=2, <<"users">>:=1} = get_counter("a-nktest"),
-%%    #{<<"domains">>:=1, <<"users">>:=1} = get_counter("b.a-nktest"),
-%%
-%%    % If we unload "a-nktest"
-%%    % - it will be detected by actor /a-nktest/core/domains/b (leader is down) at it will stop
-%%    % - it will be detected by actor /b.a-nktest/core/domains/c and /users/ut1, they will stop
-%%    nkactor:stop("/root/core/domains/a-nktest"),
-%%    timer:sleep(100),
-%%    #{<<"domains">>:=0, <<"users">>:=0} = get_counter("root"),
-%%    false = nkservice_actor_db:is_activated("/root/core/domains/a-nktest"),
-%%    false = nkservice_actor_db:is_activated("/a-nktest/core/domains/b"),
-%%    false = nkservice_actor_db:is_activated("/b.a-nktest/core/domains/c"),
-%%    false = nkservice_actor_db:is_activated("/b.a-nktest/core/users/ut1"),
-%%
-%%    % If we load "ut1" al domains up to root will be activated
-%%    {200, _} = http_get("/domains/b.a-nktest/users/ut1"),
-%%    #{<<"domains">>:=2, <<"users">>:=1} = get_counter("root"),
-%%    #{<<"domains">>:=1, <<"users">>:=1} = get_counter("a-nktest"),
-%%    #{<<"users">>:=1} = get_counter("b.a-nktest"),
-%%    {true, _} = nkservice_actor_db:is_activated("/root/core/domains/a-nktest"),
-%%    {true, _} = nkservice_actor_db:is_activated("/a-nktest/core/domains/b"),
-%%    false = nkservice_actor_db:is_activated("/b.a-nktest/core/domains/c"),
-%%    {true, _} = nkservice_actor_db:is_activated("/b.a-nktest/core/users/ut1"),
-%%
-%%    % Cascade Delete
-%%    {422, #{<<"reason">>:=<<"actor_has_linked_actors">>}} = http_delete("/domains/root/domains/a-nktest"),
-%%    {200, _} = http_delete("/domains/root/domains/a-nktest?cascade=true"),
-%%    ok.
-%%
-%%
-%%disable_test() ->
-%%    #{d1:=D1, d2:=D2, d3:=D3, u1:=U1} = nkactor_core_test_util:test_data(),
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=RootUID}}} = req(#{resource=>"domains", name=>"root"}),
-%%
-%%    % Create domains
-%%    {created, A1} = req(#{verb=>create, resource=>domains, name=>"a-nktest", body=>D1}),
-%%    io:format("A1\n~p\n", [A1]),
-%%    #{
-%%        spec := #{
-%%            <<"httpPool">> := #{
-%%                <<"maxConnections">> := 25,
-%%                <<"timeout">> := 60000
-%%            }
-%%        } = Spec,
-%%        <<"metadata">> := #{
-%%            <<"generation">> := 0,
-%%            hash := Vsn,
-%%            <<"uid">> := A_UID,
-%%            update_time := Time,
-%%            <<"links">> := #{RootUID:=<<"io.netc.core.domain">>}
-%%        }
-%%    } = A1,
-%%
-%%    {created, _} = req(#{verb=>create, domain=>"a-nktest", resource=>"domains", name=>"b", body=>D2}),
-%%    {created, _} = req(#{verb=>create, domain=>"b.a-nktest", resource=>"domains", name=>"c", body=>D3}),
-%%    {created, _} = req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut1", body=>U1}),
-%%    {true, _} = nkservice_actor_db:is_activated("/root/core/domains/a-nktest"),
-%%    {true, _} = nkservice_actor_db:is_activated("/a-nktest/core/domains/b"),
-%%    {true, _} = nkservice_actor_db:is_activated("/b.a-nktest/core/domains/c"),
-%%    {true, _} = nkservice_actor_db:is_activated("/b.a-nktest/core/users/ut1"),
-%%    #{<<"domains">>:=3, <<"users">>:=1} = get_counter("root"),
-%%    #{<<"domains">>:=2, <<"users">>:=1} = get_counter("a-nktest"),
-%%    #{<<"domains">>:=1, <<"users">>:=1} = get_counter("b.a-nktest"),
-%%
-%%
-%%    % /root
-%%    % /a(.root)
-%%    % /b.a-nktest(.root)
-%%    % /b.a-nktest/users/ut1
-%%    % /c.b.a-nktest(.root)
-%%
-%%    % Perform a no-op on domain "a-nktest"
-%%    Upd1 = #{spec=>Spec, <<"metadata">> => #{<<"isEnabled">>=>true}},
-%%    {ok, A1} = req(#{verb=>update, resource=>domains, name=>"a-nktest", body=>Upd1}),
-%%
-%%    % Perform a disable on domain "a-nktest"
-%%    % Domain will unload all actors, including /a-nktest/core/domains/b
-%%    % B domain will unload ut1 and domain C
-%%    Upd2 = #{<<"metadata">> => #{<<"isEnabled">>=>false}},
-%%    {ok, A2} = req(#{verb=>update, resource=>domains, name=>"a-nktest", body=>Upd2}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"Domain">>,
-%%        <<"metadata">> := #{
-%%            <<"isEnabled">> := false,
-%%            <<"generation">> := 1,
-%%            hash := Vsn2,
-%%            <<"uid">> := A_UID,
-%%            update_time := Time2,
-%%            <<"links">> := #{RootUID:=<<"io.netc.core.domain">>}
-%%        }
-%%    } = A2,
-%%    false = (Vsn==Vsn2),
-%%    true = (Time2>Time),
-%%    timer:sleep(100),
-%%    {true, _} = nkservice_actor_db:is_activated("/root/core/domains/a-nktest"),
-%%    false = nkservice_actor_db:is_activated("/a-nktest/core/domains/b"),
-%%    false = nkservice_actor_db:is_activated("/b.a-nktest/core/domains/c"),
-%%    false = nkservice_actor_db:is_activated("/b.a-nktest/core/users/ut1"),
-%%
-%%    % Now we are performing some operations over actors in a disabled domain
-%%
-%%    % GET is possible only if we don't activate
-%%    {error, #{<<"reason">>:=<<"domain_is_disabled">>}} =
-%%        req(#{verb=>get, domain=>"b.a-nktest", resource=>users, name=>"ut1"}),
-%%    {ok, #{<<"kind">>:=<<"User">>}} =
-%%        req(#{verb=>get, domain=>"b.a-nktest", resource=>users, name=>"ut1", params=>#{activate=>false}}),
-%%    {200, #{<<"kind">>:=<<"User">>}} = http_get("/domains/b.a-nktest/users/ut1?activate=false"),
-%%
-%%    % UPDATE or CREATE are not possible any case
-%%    {error, #{<<"reason">>:=<<"domain_is_disabled">>}} =
-%%        req(#{verb=>update, domain=>"b.a-nktest", resource=>users, name=>"ut1",
-%%            params=>#{activate=>false}, body=>#{}}),
-%%    {error, #{<<"reason">>:=<<"domain_is_disabled">>}} =
-%%        req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut2",
-%%            params=>#{activate=>false}, body=>#{}}),
-%%
-%%    % DELETE is always possible
-%%    {200, _} = http_delete("/domains/b.a-nktest/users/ut1"),
-%%    {404, _} = http_delete("/domains/b.a-nktest/users/ut1"),
-%%    ok.
-%%
-%%
-%%list_test_1() ->
-%%    {ok, #{<<"domains">>:=2, <<"users">>:=1}, _} = nkactor:search_resources(?ROOT_SRV, "root", "core", #{deep=>false}),   % root and a-nktest
-%%    {ok, #{<<"domains">>:=4, <<"users">>:=2}, _} = nkactor:search_resources(?ROOT_SRV, "root", "core", #{deep=>true}),
-%%    {ok, #{<<"domains">>:=1}=M1, _} = nkactor:search_resources(?ROOT_SRV, "a-nktest", "core", #{}), % b
-%%    false = maps:is_key(<<"users">>, M1),
-%%    {ok, #{<<"domains">>:=2, <<"users">>:=1}, _} = nkactor:search_resources(?ROOT_SRV, "a-nktest", "core", #{deep=>true}), % b, c
-%%    {ok, #{<<"domains">>:=1, <<"users">>:=1}, _} = nkactor:search_resources(?ROOT_SRV, "b.a-nktest", "core", #{}), % c
-%%    {ok, #{<<"domains">>:=1, <<"users">>:=1}, _} = nkactor:search_resources(?ROOT_SRV, "b.a-nktest", "core", #{deep=>true}), % c
-%%    {ok, #{<<"events">>:=1}=E1, _} = nkactor:search_resources(?ROOT_SRV, "c.b.a-nktest", "core", #{deep=>true}),
-%%    false = maps:is_key(<<"domains">>, E1),
-%%    false = maps:is_key(<<"users">>, E1),
-%%
-%%    Root_P = "/root/core/domains/root",
-%%    Admin_P = "/root/core/users/admin",
-%%    A_P = "/root/core/domains/a-nktest",
-%%    B_A_P = "/a-nktest/core/domains/b",
-%%    C_B_A_P = "/b.a-nktest/core/domains/c",
-%%    U1_P = "/b.a-nktest/core/users/ut1",
-%%    {ok, #actor_id{uid=Root_UID}, _} = nkactor:find(Root_P),
-%%    {ok, #actor_id{uid=Admin_UID}, _} = nkactor:find(Admin_P),
-%%    {ok, #actor_id{uid=A_UID}, _} = nkactor:find(A_P),
-%%    {ok, #actor_id{uid=B_A_UID}, _} = nkactor:find(B_A_P),
-%%    {ok, #actor_id{uid=C_B_A_UID}, _} = nkactor:find(C_B_A_P),
-%%    {ok, #actor_id{uid=U1_UID}, _} = nkactor:find(U1_P),
-%%
-%%    {ok, [{A_UID, <<"io.netc.core.domain">>}, {Admin_UID, <<"io.netc.core.domain">>}]= L5, _} = nkactor:search_linked_to(?ROOT_SRV, "root", Root_P, any, #{}),
-%%    {ok, L5, _} = nkactor:search_linked_to(?ROOT_SRV, "root", Root_P, <<"io.netc.core.domain">>, #{}),
-%%    {ok, [], _} = nkactor:search_linked_to(?ROOT_SRV, "root", Root_P, <<"domain2">>, #{}),
-%%
-%%    {ok, L5, _} = nkactor:search_linked_to(?ROOT_SRV, "root", Root_P, any, #{deep=>true}),
-%%    {ok, [], _} = nkactor:search_linked_to(?ROOT_SRV, "root", A_P, any, #{}),
-%%    {ok, [{B_A_UID, <<"io.netc.core.domain">>}]=L6, _} = nkactor:search_linked_to(?ROOT_SRV, "root", A_P, any, #{deep=>true}),
-%%    {ok, L6, _} = nkactor:search_linked_to(?ROOT_SRV, "a-nktest", A_P, any, #{}),
-%%
-%%    {ok, [{C_B_A_UID, <<"io.netc.core.domain">>}, {U1_UID, <<"io.netc.core.domain">>}]=L7, _} = nkactor:search_linked_to(?ROOT_SRV, "root", B_A_P, any, #{deep=>true}),
-%%    {ok, [], _} = nkactor:search_linked_to(?ROOT_SRV, "root", B_A_P, any, #{}),
-%%    {ok, L7, _} = nkactor:search_linked_to(?ROOT_SRV, "a-nktest", B_A_P, any, #{deep=>true}),
-%%    {ok, [], _} = nkactor:search_linked_to(?ROOT_SRV, "a-nktest", B_A_P, any, #{}),
-%%    {ok, L7, _} = nkactor:search_linked_to(?ROOT_SRV, "b.a-nktest", B_A_P, any, #{}),
-%%    {ok, [], _} = nkactor:search_linked_to(?ROOT_SRV, "c.b.a-nktest", B_A_P, any, #{deep=>true}),
-%%
-%%    {ok, [], _} = nkactor:search_linked_to(?ROOT_SRV, "root", C_B_A_P, any, #{deep=>true}),
-%%
-%%
-%%    {ok, L1, _} = nkactor:search_fts(?ROOT_SRV, "root", any, <<"domain">>, #{deep=>true}),
-%%    L1B = lists:sort(L1),
-%%    L1B = lists:sort([A_UID, B_A_UID, C_B_A_UID]),
-%%    {ok, L1, _} = nkactor:search_fts(?ROOT_SRV, "root", any, <<"dómain"/utf8>>, #{deep=>true}),
-%%    {ok, L1, _} = nkactor:search_fts(?ROOT_SRV, "root", any, <<"dóm*"/utf8>>, #{deep=>true}),
-%%    {ok, [A_UID], _} = nkactor:search_fts(?ROOT_SRV, "root", any, <<"domain">>, #{}),
-%%    {ok, [], _} = nkactor:search_fts(?ROOT_SRV, "root", <<"name">>, <<"domain">>, #{deep=>true}),
-%%    {ok, L1, _} = nkactor:search_fts(?ROOT_SRV, "root", <<"fts_domain">>, <<"domain">>, #{deep=>true}),
-%%
-%%    {ok, L2, _} = nkactor:search_fts(?ROOT_SRV, "a-nktest", any, <<"domain">>, #{deep=>true}),
-%%    L2B = lists:sort(L2),
-%%    L2B = lists:sort([B_A_UID, C_B_A_UID]),
-%%    {ok, [B_A_UID], _} = nkactor:search_fts(?ROOT_SRV, "a-nktest", any, <<"domain">>, #{}),
-%%    {ok, [C_B_A_UID], _} = nkactor:search_fts(?ROOT_SRV, "b.a-nktest", any, <<"domain">>, #{}),
-%%
-%%    P1 = #{
-%%        domain => "root",
-%%        filter => #{
-%%            'and' => [#{field=><<"resource">>, op=>eq, value=><<"domains">>}]
-%%        },
-%%        sort => [#{order=>asc, field=><<"name">>}]
-%%    },
-%%    {ok, [#actor{id=#actor_id{uid=A_UID}}=A, #actor{id=#actor_id{uid=Root_UID}}=R], _} =
-%%        nkactor:search(?ROOT_SRV, P1, #{}),
-%%    P2 = P1#{
-%%        filter => #{
-%%            'and' => [
-%%                #{field=><<"group">>, op=>eq, value=><<"core">>},
-%%                #{field=><<"resource">>, op=>eq, value=><<"domains">>}
-%%            ]
-%%        }
-%%    },
-%%    {ok, [A, R], _} = nkactor:search(?ROOT_SRV, P2, #{}),
-%%    {ok, [A, #actor{id=#actor_id{uid=B_A_UID}}=B, #actor{id=#actor_id{uid=C_B_A_UID}}=C, R], _} =
-%%        nkactor:search(?ROOT_SRV, P2#{deep=>true}, #{}),
-%%    P3 = P2#{
-%%        domain => "a-nktest"
-%%    },
-%%    {ok, [B], _} = nkactor:search(?ROOT_SRV, P3, #{}),
-%%    {ok, [B, C], _} = nkactor:search(?ROOT_SRV, P3#{deep=>true}, #{}),
-%%
-%%    {ok, [#actor_id{uid=A_UID}, #actor_id{uid=Root_UID}], _} = nkactor:search_ids(?ROOT_SRV, P2, #{}),
-%%
-%%    % Delete collection
-%%    {200, #{<<"reason">>:=<<"actors_deleted">>, <<"details">>:=#{<<"deleted">>:=0}}} = http_delete("/domains/a-nktest/users"),
-%%    {200, #{<<"reason">>:=<<"actors_deleted">>, <<"details">>:=#{<<"deleted">>:=1}}} = http_delete("/domains/a-nktest/users?deep=true"),
-%%    ok.
-%%
-%%
-%%list_test_2() ->
-%%    {200, List1} = http_get("/domains"),
-%%    #{
-%%        <<"kind">> := <<"DomainList">>,
-%%        <<"apiVersion">> := <<"v1">>,
-%%        <<"metadata">> := #{<<"total">>:=2, <<"size">>:=2},
-%%        <<"items">> := [DomainA, DomainRoot]
-%%    } = List1,
-%%    {200, List2} = http_get("/domains?totals=false"),
-%%    #{
-%%        <<"metadata">> := #{<<"size">>:=2} = M1,
-%%        <<"items">> := [DomainA, DomainRoot]
-%%    } = List2,
-%%    false = maps:is_key(<<"total">>, M1),
-%%
-%%    {400, #{<<"reason">>:=<<"field_invalid">>}} =  http_get("/domains?sort=asc1:metadata.updateTime"),
+
+
+
+list_test_1() ->
+    Empty = #{},
+    {ok, Empty} = search_resources("core", #{}),
+    {ok, #{<<"configmaps">>:=3, <<"users">>:=1}=All} = search_resources("core", #{deep=>true}),
+    {ok, Empty} = search_resources("core1", #{deep=>true}),
+    {ok, All} = search_resources("core", #{namespace=>"test.my_actors", deep=>true}),
+    {ok, Empty} = search_resources("core", #{namespace=>"test2.my_actors", deep=>true}),
+    {ok, All} = search_resources("core", #{namespace=>"a.test.my_actors", deep=>true}),
+    {ok, #{<<"configmaps">>:=1}} = search_resources("core", #{namespace=>"a.test.my_actors"}),
+    {ok, #{<<"configmaps">>:=1, <<"users">>:=1}} = search_resources("core", #{namespace=>"b.a.test.my_actors"}),
+    {ok, #{<<"configmaps">>:=2, <<"users">>:=1}} = search_resources("core", #{namespace=>"b.a.test.my_actors", deep=>true}),
+    {ok, #{<<"configmaps">>:=1}} = search_resources("core", #{namespace=>"c.b.a.test.my_actors"}),
+    {ok, #{<<"configmaps">>:=1}} = search_resources("core", #{namespace=>"c.b.a.test.my_actors", deep=>true}),
+
+    A = "ca.a.test.my_actors",
+    B = "cb.b.a.test.my_actors",
+    C = "cc.c.b.a.test.my_actors",
+    U = "ut1.b.a.test.my_actors",
+    {ok, #actor_id{uid=A_UID}} = nkactor:find(A),
+    {ok, #actor_id{uid=B_UID}} = nkactor:find(B),
+    {ok, #actor_id{uid=C_UID}} = nkactor:find(C),
+    {ok, #actor_id{uid=U_UID}} = nkactor:find(U),
+
+    {ok, []} = search_linked_to(A, #{}),
+    {ok, [{B_UID, <<"my_link">>}]} = search_linked_to(A, #{deep=>true}),
+    {ok, []} = search_linked_to(A, #{deep=>true, link_type=>b}),
+    {ok, [{B_UID, <<"my_link">>}]} = search_linked_to(A, #{deep=>true, link_type=>my_link}),
+    {ok, []} = search_linked_to(B, #{}),
+    {ok, [{L1, <<"my_link">>}, {L2, <<"my_link">>}]=LL1} = search_linked_to(B, #{deep=>true}),
+    {ok, [{L1, <<"my_link">>}]} = search_linked_to(B, #{deep=>true, size=>1}),
+    {ok, [{L2, <<"my_link">>}]} = search_linked_to(B, #{deep=>true, size=>1, from=>1}),
+    S1 = lists:sort([C_UID, U_UID]),
+    S1 = lists:sort([L1, L2]),
+    {ok, []} = search_linked_to(B, #{namespace=>"test2.my_actors", deep=>true}),
+    {ok, LL1} = search_linked_to(B, #{namespace=>"test.my_actors", deep=>true}),
+
+    {ok, [W1, W2, W3]=W11} = search_fts(domain, #{deep=>true}),
+    SW11 = lists:sort([A_UID, B_UID, C_UID]),
+    SW11 = lists:sort([W1, W2, W3]),
+    {ok, W11} = search_fts(<<"dómain"/utf8>>, #{deep=>true}),
+    {ok, W11} = search_fts(<<"dóm*"/utf8>>, #{deep=>true}),
+    {ok, [A_UID]} = search_fts(<<"dómain"/utf8>>, #{namespace=>"a.test.my_actors"}),
+    {ok, [A_UID]} = search_fts(<<"dómain"/utf8>>, #{namespace=>"a.test.my_actors", field=>fts_class}),
+    {ok, []} = search_fts(<<"dómain"/utf8>>, #{namespace=>"a.test.my_actors", field=>fts_class2}),
+
+
+    P1 = #{
+        deep => true,
+        totals => true,
+        filter => #{
+            'and' => [#{field=><<"resource">>, op=>eq, value=><<"configmaps">>}]
+        },
+        sort => [#{order=>asc, field=><<"name">>}]
+    },
+    {ok, [#{uid:=A_UID}, #{uid:=B_UID}, #{uid:=C_UID}], #{size:=3, total:=3}} = search(P1),
+    {ok, [#{uid:=B_UID}], #{size:=1, total:=3}} = search(P1#{from=>1, size=>1}),
+
+    {ok, [#{uid:=A_UID}, #{uid:=B_UID}], #{size:=2, total:=3}} = search(P1#{size=>2}),
+    {ok, [#{uid:=B_UID}, #{uid:=C_UID}], #{size:=2, total:=2}} = search(P1#{namespace=>"b.a.test.my_actors"}),
+
+    {error, actor_has_linked_actors} = nkactor:delete(B_UID),
+    {error, actor_has_linked_actors} = req(#{verb=>delete, uid=>B_UID}),
+
+%%    D1 = #{deep=>true, filter=>#{'and' => [#{field=><<"resource">>, op=>eq, value=><<"users">>}]}, do_delete=>true},
+%%    {deleted, 1} = nkactor:search_delete(my_actors, D1),
+%%    {deleted, 0} = nkactor:search_delete(my_actors, D1),
+
+    {error, {syntax_error, <<"sort.order">>}} = search(#{sort=>[#{order=>asc1, field=>"metadata.update_time"}]}),
+
+
 %%    {2, 2, [DomainRoot, DomainA]} = http_list("/domains?sort=asc:metadata.updateTime"),
 %%    {4, 4, [DomainRoot, DomainA, DomainB, DomainC]} = http_list("/domains?sort=asc:metadata.updateTime&deep=true"),
 %%    {4, 4, [DomainC, DomainB, DomainA, DomainRoot]} = http_list("/domains/root/domains?deep=true"),
@@ -583,7 +405,7 @@ namespaces_test() ->
 %%    {1, 1, [User1]} = http_list("/users?fts=my&deep=true"),
 %%    {1, 1, [User1]} = http_list("/users?fts=fts_name:my&deep=true"),
 %%    {0, 0, []} = http_list("/users?fts=fts_domain:my&deep=true"),
-%%    ok.
+    ok.
 %%
 %%
 %%search_test() ->
@@ -1355,3 +1177,18 @@ namespaces_test() ->
 %%%% Util
 %%%% ===================================================================
 %%
+%%
+%%
+
+search_resources(Group, Opts) ->
+    nkactor:search_resources(my_actors, Group, Opts).
+
+search_linked_to(Id, Opts) ->
+    nkactor:search_linked_to(my_actors, Id, Opts).
+
+search_fts(Word, Opts) ->
+    nkactor:search_fts(my_actors, Word, Opts).
+
+search(Spec) ->
+    nkactor:search_actors(my_actors, Spec).
+

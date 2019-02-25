@@ -7,6 +7,7 @@
 
 
 -define(GROUP_CORE, <<"core">>).
+-define(GROUP_CORE_API_V1A1, <<"v1a1">>).
 
 -define(RES_CORE_HTTP_POOOLER, <<"httppooler">>).
 -define(RES_CORE_ACCESS_IDS, <<"accessids">>).
