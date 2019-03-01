@@ -197,18 +197,6 @@ actor_to_api_actor_syntax() ->
 	}.
 
 
-parse_params_syntax(#{params:Params}) ->
-
-
-
-
-
-%% @doc
-parse_params_syntax() ->
-	#{
-		'__allow_unknown' => true
-	}.
-
 
 
 

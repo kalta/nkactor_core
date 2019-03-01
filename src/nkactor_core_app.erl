@@ -89,8 +89,6 @@ modules() ->
         nkactor_core_contact_actor,
         nkactor_core_http_pooler_actor,
         nkactor_core_event_actor,
-        %nkactor_core_file_actor,
-        %nkactor_core_file_provider_actor,
         nkactor_core_access_id_actor,
         nkactor_core_node_actor,
         nkactor_core_session_actor,
