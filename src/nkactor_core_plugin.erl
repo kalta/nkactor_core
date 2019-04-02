@@ -21,8 +21,9 @@
 %% @doc Default callbacks for plugin definitions
 -module(nkactor_core_plugin).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
--export([plugin_deps/0]).
+-export([plugin_deps/0, plugin_config/3]).
 
+-include("nkactor_core.hrl").
 
 %% ===================================================================
 %% Plugin Callbacks
@@ -32,4 +33,22 @@
 %% @doc 
 plugin_deps() ->
 	[nkactor].
+
+
+%% @doc
+plugin_config(_SrvId, Config, _Service) ->
+	Modules = [
+		nkactor_core_configmap_actor,
+		nkactor_core_contact_actor,
+		nkactor_core_http_pooler_actor,
+		nkactor_core_event_actor,
+		nkactor_core_access_id_actor,
+		nkactor_core_node_actor,
+		nkactor_core_session_actor,
+		nkactor_core_task_actor,
+		nkactor_core_token_actor,
+		nkactor_core_user_actor
+	],
+	nkactor_plugin:add_modules(Config, ?GROUP_CORE, Modules).
+
 

@@ -74,7 +74,7 @@ api_actor_to_actor(SrvId, Req, ApiActor) ->
 		ApiRes = maps:get(resource, Req, undefined),
 		Res = case Parsed of
 			#{<<"kind">>:=Kind} when Group /= undefined ->
-				case nkactor_util:get_module(SrvId, {camel, Kind}) of
+				case nkactor_util:get_module(SrvId, Group, {camel, Kind}) of
 					undefined ->
 						throw({syntax_error, <<"kind">>});
 					Module ->
@@ -140,7 +140,8 @@ api_actor_to_actor_syntax() ->
 			<<"inAlaram">> => {'__key', in_alarm},
 			<<"alarms">> => {'__key', alarms},
 			<<"nextStatusTime">> => {'__key', next_status_time},
-			<<"description">> => {'__key', description}
+			<<"description">> => {'__key', description},
+			<<"trace_id">> => {'__key', trace_id}
 		}}
 	}.
 
@@ -192,7 +193,8 @@ actor_to_api_actor_syntax() ->
 			in_alarm => {'__key', <<"inAlaram">>},
 			alarms => {'__key', <<"alarms">>},
 			next_status_time => {'__key', <<"nextStatusTime">>},
-			description => {'__key', <<"description">>}
+			description => {'__key', <<"description">>},
+			trace_id => {'__key', <<"trace_id">>}
 		}}
 	}.
 

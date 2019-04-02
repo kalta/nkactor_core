@@ -183,7 +183,7 @@ activation_test() ->
     req(#{verb=>delete, resource=>users, name=>"ut1"}),
 
     % Create object without activation
-    {ok, Actor1} = nkactor:create(U1, #{activate=>false}),
+    {ok, Actor1} = nkactor:create(U1, #{activate=>false, get_actor=>true}),
     #{
         group := <<"core">>,
         resource := <<"users">>,
@@ -206,7 +206,7 @@ activation_test() ->
     ok = nkactor:delete(<<"core:users:ut1.test.my_actors">>),
 
     % Create with TTL
-    {ok, #{uid:=UID2}} = nkactor:create(U1, #{ttl=>500}),
+    {ok, #actor_id{uid=UID2}} = nkactor:create(U1, #{ttl=>500}),
     {true, my_actors, _} = nkactor_namespace:find_actor(UID2),
 
     timer:sleep(600),

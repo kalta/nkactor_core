@@ -24,7 +24,6 @@
 -behaviour(application).
 
 -export([start/0, start/1, start/2, stop/1]).
--export([modules/0]).
 -export([get/1, get/2, put/2, del/1]).
 -include("nkactor_core.hrl").
 
@@ -67,8 +66,6 @@ start(_Type, _Args) ->
     case nklib_config:load_env(?APP, Syntax) of
         {ok, _} ->
             {ok, Pid} = nkactor_core_sup:start_link(),
-            Modules = modules(),
-            nkactor_util:register_modules(?GROUP_CORE, Modules),
             {ok, Vsn} = application:get_key(?APP, vsn),
             lager:info("NkACTOR CORE v~s has started.", [Vsn]),
             {ok, Pid};
@@ -82,20 +79,6 @@ start(_Type, _Args) ->
 stop(_) ->
     ok.
 
-
-modules() ->
-    [
-        nkactor_core_configmap_actor,
-        nkactor_core_contact_actor,
-        nkactor_core_http_pooler_actor,
-        nkactor_core_event_actor,
-        nkactor_core_access_id_actor,
-        nkactor_core_node_actor,
-        nkactor_core_session_actor,
-        nkactor_core_task_actor,
-        nkactor_core_token_actor,
-        nkactor_core_user_actor
-    ].
 
 
 %% @doc gets a configuration value

@@ -70,7 +70,7 @@ parse(_Actor, _Req) ->
 
 %% @private
 init(_Op, #actor_st{actor=#{spec:=#{id:=Id}=Spec}}=ActorSt) ->
-    Max = maps:get(max_Connections, Spec, ?POOL_MAX_CONNECTIONS),
+    Max = maps:get(max_connections, Spec, ?POOL_MAX_CONNECTIONS),
     Timeout = maps:get(timeout, Spec, ?POOL_TIMEOUT),
     ok = hackney_pool:start_pool(Id, []),
     ok = hackney_pool:set_max_connections(Id, Max),
