@@ -28,11 +28,60 @@
 
 -include("nkactor_core.hrl").
 
--define(NS, <<"test.my_actors">>).
+-define(PGSQL_SRV, test_pgsql).
+-define(ACTOR_SRV, test_actors).
+-define(NAMESPACE, <<"test.my_actors">>).
 -define(TOKEN, <<"my_token">>).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+start() ->
+    PgSqlConfig = #{
+        targets => [#{url=>"tcp://root@127.0.0.1:26257"}],
+        flavour => cockroachdb,
+        database => nkactor_test,
+        debug => true,
+        plugins => [nkserver_ot],
+        opentrace_filter => opentrace_filter()
+    },
+    ActorsConfig = #{
+        base_namespace => ?NAMESPACE,
+        plugins => [
+            nkactor_core,
+            nkactor_store_pgsql,
+            nkactor_core_store_pgsql
+        ],
+        pgsql_service => ?PGSQL_SRV,
+        opentrace_filter => opentrace_filter(),
+        use_module => ?MODULE
+    },
+    {ok, _} = nkserver:start_link(nkpgsql, test_pgsql, PgSqlConfig),
+    {ok, _} = nkserver:start_link(nkactor, test_actors, ActorsConfig).
+
+
+
+stop() ->
+    nkserver:stop(test_actors),
+    nkserver:stop(test_pgsql).
+
+
+
+opentrace_filter() ->
+    "
+        my_spans() -> send.
+        count() -> count('request', span_name, final_result).
+    ".
+
+
+actor_authorize(#{auth:=#{token:=?TOKEN}}=Req) ->
+    {true, Req};
+
+actor_authorize(_Req) ->
+    true.
+
+
+
 
 create_test_data() ->
     d2(),
@@ -123,16 +172,16 @@ req(Req) ->
     Base = #{
         group => ?GROUP_CORE,
         auth => #{token=>?TOKEN},
-        namespace => ?NS
+        namespace => ?NAMESPACE
     },
     Req2 = maps:merge(Base, Req),
     case nkactor_request:request(Req2) of
         {ok, Reply, _} ->
             {ok, Reply};
-        {status, Status, _} ->
-            {status, Status};
         {created, Reply, _} ->
             {created, Reply};
+        {status, Status, _} ->
+            {status, Status};
         {error, Error, _} ->
             {error, Error}
     end.
@@ -370,8 +419,6 @@ send_test_event(Path) ->
 
 
 
-stop() ->
-    nkactor:stop("/nkdomain-root/core/user/admin").
 
 w(Vsn) ->
     nkdomain_api_events:wait_for_save(),

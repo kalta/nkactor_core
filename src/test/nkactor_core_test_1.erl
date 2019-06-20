@@ -38,12 +38,24 @@
 %% Public
 %% ===================================================================
 
+
+%% @private
+start() ->
+    nkactor_core_test_util:start().
+
+
+stop() ->
+    nkactor_core_test_util:stop().
+
+
+
 t1() ->
     httpc:request("http://127.0.0.1:9001/apis/core/v1a1/domains?fts=dom%C3%A1in").
-%%
-%%all_tests() ->
-%%    ok = basic_test(),
-%%    ok = activation_test(),
+
+all_tests() ->
+    ok = basic_test(),
+    ok = activation_test(),
+    ok = namespaces_test(),
 %%    nkactor_core_test_util:delete_test_data(),
 %%    ok = subdomains_test(),
 %%    nkactor_core_test_util:delete_test_data(),
@@ -60,10 +72,10 @@ t1() ->
 %%    nkactor_core_test_util:delete_test_data(),
 %%    ok = event_test(),
 %%    nkactor_core_test_util:delete_test_data(),
-%%    ok.
-
+    ok.
 
 basic_test() ->
+
     req(#{verb=>delete, resource=>users, name=>"ut1"}),
 
     Path1 = <<"core:users:ut1.test.my_actors">>,
@@ -72,7 +84,7 @@ basic_test() ->
     {error, actor_not_found} = req(#{verb=>get, resource=>users, name=>ut1}),
     {error, verb_not_allowed} = req(#{verb=>get1, resource=>users, name=>ut1}),
     {error, resource_invalid} = req(#{verb=>get, resource=>users2, name=>ut1}),
-%%
+
     % Create an user
     U1 = #{
         group => core,
@@ -86,6 +98,7 @@ basic_test() ->
     {created, Actor1} = req(#{verb=>create, resource=>users, name=>"ut1", body=>U1}),
     #{
         group := <<"core">>,
+
         resource := <<"users">>,
         name := <<"ut1">>,
         namespace := <<"test.my_actors">>,
@@ -113,7 +126,7 @@ basic_test() ->
 
 
     % The actor is loaded
-    {true, my_actors, #actor_id{name = <<"ut1">>, pid=Pid1}= ActorId1} = nkactor_namespace:find_actor(UID),
+    {true, test_actors, #actor_id{name = <<"ut1">>, pid=Pid1}= ActorId1} = nkactor_namespace:find_actor(UID),
     true = is_pid(Pid1),
     {ok, ActorId1} = nkactor:find(ActorId1),
     {ok, ActorId1} = nkactor:find(UID),
@@ -148,7 +161,7 @@ basic_test() ->
     % Load with TTL
     {ok, Actor1} = req(#{verb=>get, resource=>users, name=>ut1, params=>#{ttl=>500}}),
     timer:sleep(50),
-    {true, my_actors, #actor_id{pid=Pid2}} = nkactor_namespace:find_actor(UID),
+    {true, test_actors, #actor_id{pid=Pid2}} = nkactor_namespace:find_actor(UID),
     true = Pid1 /= Pid2,
     timer:sleep(600),
     false = nkactor_namespace:find_actor(UID),
@@ -173,7 +186,7 @@ activation_test() ->
     % Invalid fields
     {error, {field_invalid, <<"name">>}} =
         req(#{verb=>create, resource=>users, name=>"utest1", body=>U1}),
-    {error,{namespace_not_found,<<"domain1">>}} =
+    {error,{service_not_found,<<"domain1">>}} =
         req(#{verb=>create, resource=>users, namespace=>domain1, name=>"ut1", body=>U1}),
     {error, {field_invalid, <<"group">>}} =
         req(#{verb=>create, resource=>users, name=>"utest1", body=>U1#{group=>core2}}),
@@ -207,7 +220,7 @@ activation_test() ->
 
     % Create with TTL
     {ok, #actor_id{uid=UID2}} = nkactor:create(U1, #{ttl=>500}),
-    {true, my_actors, _} = nkactor_namespace:find_actor(UID2),
+    {true, test_actors, _} = nkactor_namespace:find_actor(UID2),
 
     timer:sleep(600),
     false = nkactor_namespace:find_actor(UID2),
@@ -217,13 +230,13 @@ activation_test() ->
 
 namespaces_test() ->
     % Delete all and stop namespaces
-    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}),
-    nkactor_namespace:stop_namespace(<<"c.b.a.test.my_actors">>, normal),
-    nkactor_namespace:stop_namespace(<<"a.test.my_actors">>, normal),
+    nkactor:search_delete(test_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}),
+    nkactor_namespace:stop(<<"c.b.a.test.my_actors">>, normal),
+    nkactor_namespace:stop(<<"a.test.my_actors">>, normal),
     timer:sleep(50),
 
-    [{<<"my_actors">>, my_actors, _}] = nkactor_master:get_all_namespaces(<<>>),
-    [{<<"my_actors">>, my_actors, _}] = nkactor_master:get_all_namespaces("my_actors"),
+    [{<<"test.my_actors">>, test_actors, _}] = nkactor_master:get_all_namespaces(<<>>),
+    [{<<"test.my_actors">>, test_actors, _}] = nkactor_master:get_all_namespaces("my_actors"),
     [] = nkactor_master:get_all_namespaces("my_actors2"),
 
     % Create a config at "c.b.a.test.my_actors"
@@ -244,37 +257,42 @@ namespaces_test() ->
     #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("c.b.a.test.my_actors"),
 
     [
-        {<<"my_actors">>, my_actors, _},
-        {<<"a.test.my_actors">>, my_actors, _},
-        {<<"c.b.a.test.my_actors">>, my_actors, _}
+        {<<"test.my_actors">>, test_actors, _},
+        {<<"a.test.my_actors">>, test_actors, _},
+        {<<"c.b.a.test.my_actors">>, test_actors, _}
     ] = nkactor_master:get_all_namespaces(<<>>),
     [
-        {<<"my_actors">>, my_actors, _},
-        {<<"a.test.my_actors">>, my_actors, _},
-        {<<"c.b.a.test.my_actors">>, my_actors, _}
+        {<<"test.my_actors">>, test_actors, _},
+        {<<"a.test.my_actors">>, test_actors, _},
+        {<<"c.b.a.test.my_actors">>, test_actors, _}
     ] = nkactor_master:get_all_namespaces("my_actors"),
     [
-        {<<"a.test.my_actors">>, my_actors, _},
-        {<<"c.b.a.test.my_actors">>, my_actors, _}
+        {<<"test.my_actors">>, test_actors, _},
+        {<<"a.test.my_actors">>, test_actors, _},
+        {<<"c.b.a.test.my_actors">>, test_actors, _}
     ] = nkactor_master:get_all_namespaces("test.my_actors"),
 
     {true, _, #actor_id{pid=C1}} = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
-    {ok, my_actors, NS1} = nkactor_namespace:get_namespace("c.b.a.test.my_actors"),
+    {ok, test_actors} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
+    NS1 = nkactor_namespace:get_global_pid("c.b.a.test.my_actors"),
+    true = is_pid(NS1),
     % If the namespace is killed, or stopped with anything other than 'normal' the actor re-registers with it, restarting it
-    ok = nkactor_namespace:stop_namespace("c.b.a.test.my_actors", my_stop),
+    ok = nkactor_namespace:stop("c.b.a.test.my_actors", my_stop),
     timer:sleep(50),
     {true, _, #actor_id{pid=C1}} = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
-    {ok, my_actors, NS2} = nkactor_namespace:get_namespace("c.b.a.test.my_actors"),
+    {ok, test_actors} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
+    NS2 = nkactor_namespace:get_global_pid("c.b.a.test.my_actors"),
+    true = is_pid(NS2),
     true = NS1 /= NS2,
     % If it is stopped,
-    ok = nkactor_namespace:stop_namespace("c.b.a.test.my_actors", normal),
+    ok = nkactor_namespace:stop("c.b.a.test.my_actors", normal),
     timer:sleep(50),
     false = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
-    {ok, my_actors, NS3} = nkactor_namespace:get_namespace("c.b.a.test.my_actors"),
+    {ok, test_actors} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
+    NS3 = nkactor_namespace:get_global_pid("c.b.a.test.my_actors"),
+    true = is_pid(NS3),
     true = NS2 /= NS3,
     ok.
-
-
 
 
 

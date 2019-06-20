@@ -74,11 +74,11 @@ api_actor_to_actor(SrvId, Req, ApiActor) ->
 		ApiRes = maps:get(resource, Req, undefined),
 		Res = case Parsed of
 			#{<<"kind">>:=Kind} when Group /= undefined ->
-				case nkactor_util:get_module(SrvId, Group, {camel, Kind}) of
+				case nkactor_actor:get_module(SrvId, Group, {camel, Kind}) of
 					undefined ->
 						throw({syntax_error, <<"kind">>});
 					Module ->
-						Config = nkactor_util:get_actor_config(SrvId, Module),
+						Config = nkactor_actor:get_config(SrvId, Module),
 						case maps:get(resource, Config) of
 							BodyRes when BodyRes==ApiRes orelse ApiRes==undefined ->
 								BodyRes;
@@ -152,7 +152,8 @@ api_actor_to_actor_syntax() ->
 
 actor_to_api_actor(ActorSrvId, Vsn, Actor) ->
 	#{uid:=UID, group:=Group, resource:=Res, name:=Name, namespace:=Namespace} = Actor,
-	{ok, Config} = nkactor_util:get_actor_config(ActorSrvId, Group, Res),
+	Module = nkactor_actor:get_module(ActorSrvId, Group, Res),
+	Config = nkactor_actor:get_config(ActorSrvId, Module),
 	#{camel:=Camel} = Config,
 	{ok, ApiActor, _} = nklib_syntax:parse(Actor, actor_to_api_actor_syntax()),
 	Data1 = maps:get(data, Actor, #{}),
