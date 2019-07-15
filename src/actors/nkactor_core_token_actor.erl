@@ -70,7 +70,7 @@ parse(Actor, Req) ->
 
 
 %% @doc
-request(get, [<<"_execute">>], ActorId, Req) ->
+request(get, <<"_execute">>, ActorId, Req) ->
     Params = maps:get(params, Req, #{}),
     case nkactor:sync_op(ActorId, {token_execute, Params}) of
         {ok, Reply} ->

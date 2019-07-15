@@ -22,21 +22,21 @@
 -module(nkactor_core_callbacks).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
--export([msg/1]).
+-export([status/1]).
 
 
-msg({email_duplicated, E})              -> {"Duplicated email '~s'", [E]};
-msg({file_not_found, F})                -> {"File '~s' not found", [F]};
-msg(file_is_invalid)                    -> "File is invalid";
-msg(file_too_large)                     -> "File is too large";
-msg(provider_class_unknown)             -> "Provider class is unknown";
-msg(token_invalid)                      -> "Invalid token";
-msg(token_invalid_ttl)                  -> "Invalid token TTL";
-msg(token_down)                         -> "Token process is down";
-msg(task_max_tries_reached)             -> "Task max tries reached";
-msg(task_max_time_reached)              -> "Task max time reached";
-msg(user_is_disabled) 		            -> "User is disabled";
-msg(user_unknown)                       -> "Unknown user";
-msg({user_unknown, UserId})             -> {"Unknown user '~s", [UserId]};
-msg(watch_stop)                         -> "Watch stopped";
-msg(_)   		                        -> continue.
+status({email_duplicated, E})              -> {"Duplicated email '~s'", [E]};
+status({file_not_found, F})                -> {"File '~s' not found", [F]};
+status(file_is_invalid)                    -> "File is invalid";
+status(file_too_large)                     -> "File is too large";
+status(provider_class_unknown)             -> "Provider class is unknown";
+status(token_invalid)                      -> "Invalid token";
+status(token_invalid_ttl)                  -> "Invalid token TTL";
+status(token_down)                         -> "Token process is down";
+status(task_max_tries_reached)             -> "Task max tries reached";
+status(task_max_time_reached)              -> "Task max time reached";
+status(user_is_disabled) 		           -> "User is disabled";
+status(user_unknown)                       -> "Unknown user";
+status({user_unknown, UserId})             -> {"Unknown user '~s", [UserId]};
+status(watch_stop)                         -> "Watch stopped";
+status(_)   		                        -> continue.

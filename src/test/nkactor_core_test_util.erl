@@ -33,8 +33,12 @@
 -define(NAMESPACE, <<"test.my_actors">>).
 -define(TOKEN, <<"my_token">>).
 
+-define(LISTEN, "http://127.0.0.1:9001").
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% ===================================================================
+%% Start and stop
+%% ===================================================================
 
 start() ->
     PgSqlConfig = #{
@@ -50,18 +54,28 @@ start() ->
         plugins => [
             nkactor_core,
             nkactor_store_pgsql,
-            nkactor_core_store_pgsql
+            nkactor_core_store_pgsql,
+            nkactor_kapi,
+            nkactor_core_kapi
         ],
         pgsql_service => ?PGSQL_SRV,
         opentrace_filter => opentrace_filter(),
         use_module => ?MODULE
     },
+    RestConfig = #{
+        url => ?LISTEN,
+        use_module => ?MODULE,
+        plugins => [nkserver_ot],
+        opentrace_filter => opentrace_filter()
+    },
     {ok, _} = nkserver:start_link(nkpgsql, test_pgsql, PgSqlConfig),
-    {ok, _} = nkserver:start_link(nkactor, test_actors, ActorsConfig).
+    {ok, _} = nkserver:start_link(nkactor, test_actors, ActorsConfig),
+    {ok, _} = nkserver:start_link(nkrest, test_rest, RestConfig).
 
 
 
 stop() ->
+    nkserver:stop(test_rest),
     nkserver:stop(test_actors),
     nkserver:stop(test_pgsql).
 
@@ -74,6 +88,14 @@ opentrace_filter() ->
     ".
 
 
+%% ===================================================================
+%% Callbacks
+%% ===================================================================
+
+http_request(Verb, Path, Req, _State) ->
+    nkactor_kapi:http_request(test_actors, Verb, Path, Req).
+
+
 actor_authorize(#{auth:=#{token:=?TOKEN}}=Req) ->
     {true, Req};
 
@@ -81,6 +103,9 @@ actor_authorize(_Req) ->
     true.
 
 
+%% ===================================================================
+%% Util
+%% ===================================================================
 
 
 create_test_data() ->
@@ -95,7 +120,7 @@ create_test_data() ->
 
 
 d2() ->
-    nkactor:search_delete(my_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}).
+    {ok, _} = nkactor:delete_multi(?ACTOR_SRV, #{namespace=>?NAMESPACE, deep=>true}, #{}).
 
 
 delete_test_data() ->
@@ -109,6 +134,15 @@ delete_test_data() ->
     % Delete events generated on deletion of objects
     http_delete("/domains/root/events?deep=true&fieldSelector=path:prefix:a-nktest"),
     ok.
+
+
+
+
+%% Creates:
+%% - ca  @ a.test.my_actors -> core:configmaps:ca.a.test.my_actors
+%% - cb  @ b.a.test.my_actors -> core:configmaps:cb.b.a.test.my_actors (linked to ca)
+%% - cc  @ c.b.a.test.my_actors -> core:configmaps:cc.c.b.a.test.my_actors (linked to cb)
+%% - ut1 @ b.a.test.my_actors -> core:users:ut1.b.a.test.my_actors (linked to cb)
 
 
 
@@ -170,21 +204,27 @@ test_data() ->
 
 req(Req) ->
     Base = #{
+        srv => ?ACTOR_SRV,          % We will update later if different
         group => ?GROUP_CORE,
-        auth => #{token=>?TOKEN},
-        namespace => ?NAMESPACE
+        auth => #{token=>?TOKEN}
+        %namespace => ?NAMESPACE
     },
     Req2 = maps:merge(Base, Req),
-    case nkactor_request:request(Req2) of
-        {ok, Reply, _} ->
-            {ok, Reply};
-        {created, Reply, _} ->
-            {created, Reply};
-        {status, Status, _} ->
-            {status, Status};
-        {error, Error, _} ->
-            {error, Error}
-    end.
+    {Action, Data, _Req2} = nkactor_request:request(Req2),
+    {Action, Data}.
+
+
+kapi_req(Req) ->
+    Base = #{
+        srv => ?ACTOR_SRV,          % We will update later if different
+        group => ?GROUP_CORE,
+        vsn => <<"v1a1">>,
+        auth => #{token=>?TOKEN}
+    },
+    Req2 = maps:merge(Base, Req),
+    {Action, Data, _Req2} = nkactor_kapi:request(Req2),
+    {Action, Data}.
+
 
 
 api_watch(Api) ->
@@ -249,31 +289,42 @@ http_delete(Path) ->
     {Code, nklib_json:decode(Body)}.
 
 http_list(Path) ->
-    {200, List} =  http_get(Path),
+    Path2 = case lists:member($?, Path) of
+        true ->
+            Path ++ "&getTotals=true";
+        false ->
+            Path ++ "?getTotals=true"
+    end,
+    {200, List} =  http_get(Path2),
     #{<<"metadata">> := #{<<"total">>:=Total, <<"size">>:=Size}, <<"items">> := Items} = List,
     {Total, Size, Items}.
 
-http_search(Domain, Spec) ->
-    Path = binary_to_list(list_to_binary([http_host(), "/search/v1a1/domains/" ++ Domain])),
-    Body = nklib_json:encode(Spec),
+http_search(Namespace, Spec) ->
+    Path = binary_to_list(list_to_binary([http_host(), "/search/v1a1/namespaces/" ++ Namespace])),
+    Spec2 = Spec#{
+        get_totals => true,
+        get_data => true,
+        get_metadata => true
+    },
+    Body = nklib_json:encode(Spec2),
     case httpc:request(post, {Path, http_auth_header(), "application/json", Body}, [], []) of
         {ok, {{_, 200, _}, _Hds, List}} ->
-            #{<<"metadata">> := #{<<"total">>:=Total, <<"size">>:=Size}, <<"items">> := Items} = nklib_json:decode(List),
+            #{<<"items">>:=Items, <<"total">>:=Total, <<"size">>:=Size} = nklib_json:decode(List),
             {Total, Size, Items};
         {ok, {{_, Code, _}, _Hds, Body2}} ->
             {Code, nklib_json:decode(Body2)}
     end.
 
 
-http_search_delete(Domain, Spec) ->
-    Path = binary_to_list(list_to_binary([http_host(), "/search/v1a1/domains/" ++ Domain ++ "?delete=true"])),
+http_search_delete(Namespace, Spec) ->
+    Path = binary_to_list(list_to_binary([http_host(), "/search/v1a1/namespaces/" ++ Namespace ])),
     Body = nklib_json:encode(Spec),
-    {ok, {{_, Code, _}, _Hds, Body2}} = httpc:request(post, {Path, http_auth_header(), "application/json", Body}, [], []),
+    {ok, {{_, Code, _}, _Hds, Body2}} = httpc:request(delete, {Path, http_auth_header(), "application/json", Body}, [], []),
     {Code, nklib_json:decode(Body2)}.
 
 
 http_host() ->
-    "http://127.0.0.1:9001".
+    ?LISTEN.
 
 
 http_url(Path) ->

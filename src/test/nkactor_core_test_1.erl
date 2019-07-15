@@ -22,7 +22,7 @@
 -module(nkactor_core_test_1).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -import(nkactor_core_test_util, [
-        req/1, api_watch/1, wait_api_event/2, api_watch_stop/1,
+        req/1, kapi_req/1, api_watch/1, wait_api_event/2, api_watch_stop/1,
         http_get/1, http_post/2, http_put/2,
         http_delete/1, http_list/1, http_search/2, http_search_delete/2,
         http_watch/1, wait_http_event/2, http_watch_stop/1,
@@ -33,6 +33,7 @@
 
 -include_lib("nkactor/include/nkactor.hrl").
 
+-define(ACTOR_SRV, test_actors).
 
 %% ===================================================================
 %% Public
@@ -56,19 +57,16 @@ all_tests() ->
     ok = basic_test(),
     ok = activation_test(),
     ok = namespaces_test(),
-%%    nkactor_core_test_util:delete_test_data(),
-%%    ok = subdomains_test(),
-%%    nkactor_core_test_util:delete_test_data(),
-%%    ok = loading_test(),
-%%    ok = disable_test(),
-%%    nkactor_core_test_util:create_test_data(),
-%%    ok = list_test_1(),
-%%    nkactor_core_test_util:create_test_data(),
-%%    ok = list_test_2(),
-%%    nkactor_core_test_util:create_test_data(),
-%%    ok = search_test(),
-%%    nkactor_core_test_util:create_test_data(),
-%%    ok = contact_test(),
+    ok = api_test(),
+    nkactor_core_test_util:create_test_data(),
+    ok = list_test_1(),
+    nkactor_core_test_util:create_test_data(),
+    ok = list_test_2(),
+    timer:sleep(100),
+    nkactor_core_test_util:create_test_data(),
+    ok = search_test(),
+    nkactor_core_test_util:create_test_data(),
+    ok = contact_test(),
 %%    nkactor_core_test_util:delete_test_data(),
 %%    ok = event_test(),
 %%    nkactor_core_test_util:delete_test_data(),
@@ -126,7 +124,7 @@ basic_test() ->
 
 
     % The actor is loaded
-    {true, test_actors, #actor_id{name = <<"ut1">>, pid=Pid1}= ActorId1} = nkactor_namespace:find_actor(UID),
+    {true, ?ACTOR_SRV, #actor_id{name = <<"ut1">>, pid=Pid1}= ActorId1} = nkactor_namespace:find_actor(UID),
     true = is_pid(Pid1),
     {ok, ActorId1} = nkactor:find(ActorId1),
     {ok, ActorId1} = nkactor:find(UID),
@@ -161,7 +159,7 @@ basic_test() ->
     % Load with TTL
     {ok, Actor1} = req(#{verb=>get, resource=>users, name=>ut1, params=>#{ttl=>500}}),
     timer:sleep(50),
-    {true, test_actors, #actor_id{pid=Pid2}} = nkactor_namespace:find_actor(UID),
+    {true, ?ACTOR_SRV, #actor_id{pid=Pid2}} = nkactor_namespace:find_actor(UID),
     true = Pid1 /= Pid2,
     timer:sleep(600),
     false = nkactor_namespace:find_actor(UID),
@@ -186,7 +184,7 @@ activation_test() ->
     % Invalid fields
     {error, {field_invalid, <<"name">>}} =
         req(#{verb=>create, resource=>users, name=>"utest1", body=>U1}),
-    {error,{service_not_found,<<"domain1">>}} =
+    {error,{field_invalid,<<"namespace">>}} =
         req(#{verb=>create, resource=>users, namespace=>domain1, name=>"ut1", body=>U1}),
     {error, {field_invalid, <<"group">>}} =
         req(#{verb=>create, resource=>users, name=>"utest1", body=>U1#{group=>core2}}),
@@ -207,7 +205,6 @@ activation_test() ->
         },
         uid := UID1,
         metadata := #{
-            vsn := <<"0">>,
             creation_time := Time,
             generation := 0,
             hash := _Vsn2,
@@ -220,7 +217,7 @@ activation_test() ->
 
     % Create with TTL
     {ok, #actor_id{uid=UID2}} = nkactor:create(U1, #{ttl=>500}),
-    {true, test_actors, _} = nkactor_namespace:find_actor(UID2),
+    {true, ?ACTOR_SRV, _} = nkactor_namespace:find_actor(UID2),
 
     timer:sleep(600),
     false = nkactor_namespace:find_actor(UID2),
@@ -230,13 +227,13 @@ activation_test() ->
 
 namespaces_test() ->
     % Delete all and stop namespaces
-    nkactor:search_delete(test_actors, #{namespace=>my_actors, deep=>true, do_delete=>true}),
+    nkactor:delete_multi(?ACTOR_SRV, #{namespace=>my_actors, deep=>true}, #{}),
     nkactor_namespace:stop(<<"c.b.a.test.my_actors">>, normal),
     nkactor_namespace:stop(<<"a.test.my_actors">>, normal),
     timer:sleep(50),
 
-    [{<<"test.my_actors">>, test_actors, _}] = nkactor_master:get_all_namespaces(<<>>),
-    [{<<"test.my_actors">>, test_actors, _}] = nkactor_master:get_all_namespaces("my_actors"),
+    [{<<"test.my_actors">>, ?ACTOR_SRV, _}] = nkactor_master:get_all_namespaces(<<>>),
+    [{<<"test.my_actors">>, ?ACTOR_SRV, _}] = nkactor_master:get_all_namespaces("my_actors"),
     [] = nkactor_master:get_all_namespaces("my_actors2"),
 
     % Create a config at "c.b.a.test.my_actors"
@@ -257,30 +254,30 @@ namespaces_test() ->
     #{<<"core:configmaps">>:=1} = nkactor_namespace:get_counters("c.b.a.test.my_actors"),
 
     [
-        {<<"test.my_actors">>, test_actors, _},
-        {<<"a.test.my_actors">>, test_actors, _},
-        {<<"c.b.a.test.my_actors">>, test_actors, _}
+        {<<"test.my_actors">>, ?ACTOR_SRV, _},
+        {<<"a.test.my_actors">>, ?ACTOR_SRV, _},
+        {<<"c.b.a.test.my_actors">>, ?ACTOR_SRV, _}
     ] = nkactor_master:get_all_namespaces(<<>>),
     [
-        {<<"test.my_actors">>, test_actors, _},
-        {<<"a.test.my_actors">>, test_actors, _},
-        {<<"c.b.a.test.my_actors">>, test_actors, _}
+        {<<"test.my_actors">>, ?ACTOR_SRV, _},
+        {<<"a.test.my_actors">>, ?ACTOR_SRV, _},
+        {<<"c.b.a.test.my_actors">>, ?ACTOR_SRV, _}
     ] = nkactor_master:get_all_namespaces("my_actors"),
     [
-        {<<"test.my_actors">>, test_actors, _},
-        {<<"a.test.my_actors">>, test_actors, _},
-        {<<"c.b.a.test.my_actors">>, test_actors, _}
+        {<<"test.my_actors">>, ?ACTOR_SRV, _},
+        {<<"a.test.my_actors">>, ?ACTOR_SRV, _},
+        {<<"c.b.a.test.my_actors">>, ?ACTOR_SRV, _}
     ] = nkactor_master:get_all_namespaces("test.my_actors"),
 
     {true, _, #actor_id{pid=C1}} = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
-    {ok, test_actors} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
+    {ok, ?ACTOR_SRV} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
     NS1 = nkactor_namespace:get_global_pid("c.b.a.test.my_actors"),
     true = is_pid(NS1),
     % If the namespace is killed, or stopped with anything other than 'normal' the actor re-registers with it, restarting it
     ok = nkactor_namespace:stop("c.b.a.test.my_actors", my_stop),
     timer:sleep(50),
     {true, _, #actor_id{pid=C1}} = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
-    {ok, test_actors} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
+    {ok, ?ACTOR_SRV} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
     NS2 = nkactor_namespace:get_global_pid("c.b.a.test.my_actors"),
     true = is_pid(NS2),
     true = NS1 /= NS2,
@@ -288,7 +285,7 @@ namespaces_test() ->
     ok = nkactor_namespace:stop("c.b.a.test.my_actors", normal),
     timer:sleep(50),
     false = nkactor_namespace:find_actor("core:configmaps:config_c.c.b.a.test.my_actors"),
-    {ok, test_actors} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
+    {ok, ?ACTOR_SRV} = nkactor_namespace:find_service("c.b.a.test.my_actors"),
     NS3 = nkactor_namespace:get_global_pid("c.b.a.test.my_actors"),
     true = is_pid(NS3),
     true = NS2 /= NS3,
@@ -296,7 +293,80 @@ namespaces_test() ->
 
 
 
+api_test() ->
+    Host = nkactor_core_test_util:http_host(),
+    {ok, {{_, 200, _}, _Hds, RawBody1}} = httpc:request(Host),
+    #{<<"paths">> := [
+        <<"/apis">>,
+        <<"/apis-ws">>,
+        <<"/apis/core">>,
+        <<"/apis/core/v1a1">>,
+        <<"/graphql">>,
+        <<"/openapi">>
+    ]} = nklib_json:decode(RawBody1),
+
+    {ok, {{_, 200, _}, _, RawBody2}} = httpc:request(Host++"/apis"),
+    #{
+        <<"apiVersion">> := <<"v1">>,
+        <<"kind">> := <<"APIGroupList">>,
+        <<"groups">> := [
+            #{
+                <<"name">> := <<"core">>,
+                <<"preferredVersion">> := #{
+                    <<"groupVersion">> := <<"core/v1a1">>,
+                    <<"version">> := <<"v1a1">>
+                },
+                <<"versions">> := [
+                    #{
+                        <<"groupVersion">> := <<"core/v1a1">>,
+                        <<"version">> := <<"v1a1">>
+                    }
+                ]
+            }
+        ]
+    } = nklib_json:decode(RawBody2),
+
+    {ok, {{_, 200, _}, _, RawBody3}} = httpc:request(Host++"/apis/core"),
+    #{
+        <<"name">> := <<"core">>,
+        <<"preferredVersion">> := #{
+            <<"groupVersion">> := <<"core/v1a1">>,
+            <<"version">> := <<"v1a1">>
+        },
+        <<"versions">> := [
+            #{
+                <<"groupVersion">> := <<"core/v1a1">>,
+                <<"version">> := <<"v1a1">>
+            }
+        ]
+    } = nklib_json:decode(RawBody3),
+
+    {ok, {{_, 200, _}, _, RawBody4}} = httpc:request(Host++"/apis/core/v1a1"),
+    #{
+        <<"kind">> := <<"APIResourceList">>,
+        <<"groupVersion">> := <<"core/v1a1">>,
+        <<"resources">> :=
+        [
+            #{
+                <<"kind">> := <<"ConfigMap">>,
+                <<"name">> := <<"configmaps">>,
+                <<"shortNames">> := [],
+                <<"singularName">> := <<"configmap">>,
+                <<"verbs">> := [
+                    <<"create">>,<<"delete">>,<<"deletecollection">>,<<"get">>,
+                    <<"list">>,<<"patch">>,<<"update">>,<<"watch">>
+                ]
+            }
+            |
+            _
+        ]
+    } = nklib_json:decode(RawBody4),
+    ok.
+
+
+
 list_test_1() ->
+    %nkactor_core_test_util:create_test_data(),
     Empty = #{},
     {ok, Empty} = search_resources("core", #{}),
     {ok, #{<<"configmaps">>:=3, <<"users">>:=1}=All} = search_resources("core", #{deep=>true}),
@@ -344,7 +414,7 @@ list_test_1() ->
 
     P1 = #{
         deep => true,
-        totals => true,
+        get_totals => true,
         filter => #{
             'and' => [#{field=><<"resource">>, op=>eq, value=><<"configmaps">>}]
         },
@@ -359,511 +429,534 @@ list_test_1() ->
     {error, actor_has_linked_actors} = nkactor:delete(B_UID),
     {error, actor_has_linked_actors} = req(#{verb=>delete, uid=>B_UID}),
 
-%%    D1 = #{deep=>true, filter=>#{'and' => [#{field=><<"resource">>, op=>eq, value=><<"users">>}]}, do_delete=>true},
-%%    {deleted, 1} = nkactor:search_delete(my_actors, D1),
-%%    {deleted, 0} = nkactor:search_delete(my_actors, D1),
+    D1 = #{deep=>true, filter=>#{'and' => [#{field=><<"resource">>, op=>eq, value=><<"users">>}]}},
+    {ok, #{deleted:=1}} = nkactor:delete_multi(?ACTOR_SRV, D1, #{}),
+    {ok, #{deleted:=0}} = nkactor:delete_multi(?ACTOR_SRV, D1, #{}),
 
     {error, {syntax_error, <<"sort.order">>}} = search(#{sort=>[#{order=>asc1, field=>"metadata.update_time"}]}),
-
-
-%%    {2, 2, [DomainRoot, DomainA]} = http_list("/domains?sort=asc:metadata.updateTime"),
-%%    {4, 4, [DomainRoot, DomainA, DomainB, DomainC]} = http_list("/domains?sort=asc:metadata.updateTime&deep=true"),
-%%    {4, 4, [DomainC, DomainB, DomainA, DomainRoot]} = http_list("/domains/root/domains?deep=true"),
-%%    {2, 2, [DomainC, DomainB]} = http_list("/domains/a-nktest/domains?deep=true"),
-%%    {1, 1, [DomainB]} = http_list("/domains/a-nktest/domains?deep=false"),
-%%    {1, 1, [DomainC]} = http_list("/domains/b.a-nktest/domains?deep=true"),
-%%    {1, 1, [DomainC]} = http_list("/domains/b.a-nktest/domains"),
-%%    {4, 2, [DomainC, DomainB]} = http_list("/domains/root/domains?deep=true&size=2"),
-%%    {4, 0, []} = http_list("/domains/root/domains?deep=true&size=0"),
-%%    {400, #{<<"reason">>:=<<"parameter_invalid">>}} =  http_get("/domains/root/domains?deep=true&size=-1"),
-%%    {4, 3, [DomainB, DomainA, DomainRoot]} = http_list("/domains/root/domains?deep=true&size=5&from=1"),
-%%
-%%    {1, 1,  [Admin]} = http_list("/users"),
-%%    {2, 2,  [User1, Admin]} = http_list("/users?deep=true"),
-%%    {0, 0,  []} = http_list("/domains/a-nktest/users"),
-%%    {1, 1,  [User1]} = http_list("/domains/a-nktest/users?deep=true"),
-%%    {1, 1,  [User1]} = http_list("/domains/b.a-nktest/users"),
-%%
-%%    #{<<"metadata">>:=#{<<"name">>:=<<"root">>}} = DomainRoot,
-%%    #{<<"metadata">>:=#{<<"domain">>:=<<"root">>, <<"name">>:=<<"a-nktest">>}} = DomainA,
-%%    #{<<"metadata">>:=#{<<"domain">>:=<<"a-nktest">>, <<"name">>:=<<"b">>}} = DomainB,
-%%    #{<<"metadata">>:=#{<<"domain">>:=<<"b.a-nktest">>, <<"name">>:=<<"c">>}} = DomainC,
-%%    #{<<"metadata">>:=#{<<"domain">>:=<<"b.a-nktest">>, <<"name">>:=<<"ut1">>}} = User1,
-%%
-%%    % labels
-%%    {0, 0, []} = http_list("/domains?labelSelector=is_b_domain"),
-%%    {2, 2, [DomainC, DomainB]} = http_list("/domains?labelSelector=is_b_domain&deep=true"),
-%%    {2, 2, [DomainB, DomainC]} = http_list("/domains?labelSelector=is_b_domain&deep=true&sort=asc:metadata.updateTime"),
-%%    {1, 1, [DomainC]} = http_list("/domains?labelSelector=is_b_domain,is_c_domain&deep=true"),
-%%    {0, 0, []} = http_list("/domains?labelSelector=is_b_domain,is_c_domain:false&deep=true"),
-%%    {2, 2, [DomainC, DomainB]} = http_list("/domains?labelSelector=is_b_domain:true&deep=true"),
-%%    {0, 0, []} = http_list("/domains?labelSelector=is_b_domain:false&deep=true"),
-%%    {0, 0, []} = http_list("/domains/a-nktest/users?labelSelector=is_b_domain"),
-%%    {1, 1, [User1]} = http_list("/domains/a-nktest/users?labelSelector=is_b_domain&deep=true"),
-%%
-%%    % links
-%%    #{<<"metadata">>:=#{<<"uid">>:=DomainA_UID}} = DomainA,
-%%    lager:error("NKLOG DA ~p", [DomainA_UID]),
-%%    {0, 0, []} = http_list("/domains?linkedTo="++binary_to_list(DomainA_UID)),
-%%    {1, 1, [DomainB]} = http_list("/domains?linkedTo="++binary_to_list(DomainA_UID)++"&deep=true"),
-%%    {1, 1, [DomainB]} = http_list("/domains?linkedTo="++binary_to_list(DomainA_UID)++":io.netc.core.domain&deep=true"),
-%%    {0, 0, []} = http_list("/domains?linkedTo="++binary_to_list(DomainA_UID)++":other&deep=true"),
-%%
-%%    % FTS
-%%    {1, 1, [DomainA]} = http_list("/domains?fts=domain"),
-%%    {3, 3, [DomainC, DomainB, DomainA]} = http_list("/domains?fts=domain&deep=true"),
-%%    %{3, 3, [DomainC, DomainB, DomainA]} = http_list(<<"/domains?fts=dómain&deep=true"/utf8>>),
-%%    % Erlang21 does not accept utf8 in url in httpc
-%%    {3, 3, [DomainC, DomainB, DomainA]} = http_list("/domains?fts=dom%C3%A1in&deep=true"),
-%%    {3, 3, [DomainC, DomainB, DomainA]} = http_list("/domains?fts=dom*&deep=true"),
-%%    {1, 1, [DomainB]} = http_list("/domains?fts=b*&deep=true"),
-%%    {0, 0, []} = http_list("/domains?fts=name:b*&deep=true"),
-%%    {1, 1, [DomainB]} = http_list("/domains?fts=fts_domain:b*&deep=true"),
-%%    {0, 0, []} = http_list("/users?fts=fts_domain:b*&deep=true"),
-%%    {1, 1, [User1]} = http_list("/users?fts=my&deep=true"),
-%%    {1, 1, [User1]} = http_list("/users?fts=fts_name:my&deep=true"),
-%%    {0, 0, []} = http_list("/users?fts=fts_domain:my&deep=true"),
     ok.
-%%
-%%
-%%search_test() ->
-%%    % No apiGroup or kind, gets all objects but no special fields
-%%    {400, #{<<"message">>:=<<"Field 'reason' is invalid">>}} =
-%%        http_search("root", #{filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
-%%
-%%    Opts1 = #{
-%%        deep => true,
-%%        filter => #{
-%%            'and' => [#{field=>kind, op=>values, value=>['Domain', 'User']}]
-%%        },
-%%        sort=>[
-%%            #{field=>kind, order=>asc},
-%%            #{field=>'metadata.updateTime', order=>desc}
-%%        ]
-%%    },
-%%    {6, 6, List1} = http_search("root", Opts1),
-%%    [
-%%        #{
-%%            <<"apiVersion">> := <<"core/v1a1">>,
-%%            <<"kind">> := <<"Domain">>,
-%%            <<"metadata">> := #{
-%%                <<"domain">> := <<"b.a-nktest">>,
-%%                <<"name">> := <<"c">>
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"Domain">>,
-%%            <<"metadata">> := #{
-%%                <<"domain">> := <<"a-nktest">>,
-%%                <<"name">> := <<"b">>
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"Domain">>,
-%%            <<"metadata">> := #{
-%%                <<"domain">> := <<"root">>,
-%%                <<"name">> := <<"a-nktest">>
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"Domain">>,
-%%            <<"metadata">> := #{
-%%                <<"domain">> := <<"root">>,
-%%                <<"name">> := <<"root">>,
-%%                <<"uid">> := RootUID
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"User">>,
-%%            <<"metadata">> := #{
-%%                <<"domain">> := <<"b.a-nktest">>,
-%%                <<"name">> := <<"ut1">>
-%%
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"User">>,
-%%            <<"metadata">> := #{
-%%                <<"domain">> := <<"root">>,
-%%                <<"name">> := <<"admin">>
-%%
-%%            }
-%%        }
-%%    ] = List1,
-%%
-%%    % apiGroup but no kind.
-%%    {400, #{<<"message">>:=<<"Field 'reason' is invalid">>}} =
-%%        http_search("root", #{apiGroup=>core, filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
-%%
-%%    Opts2 = #{
-%%        apiGroup => core,
-%%        filter => #{
-%%            'and' => [#{field=>kind, op=>gte, value=>'Event'}]
-%%        },
-%%        sort=>[
-%%            #{field=>kind, order=>asc},
-%%            #{field=>'metadata.updateTime', order=>desc}
-%%        ]
-%%    },
-%%    {3, 3, List2} = http_search("root", Opts2),
-%%    [
-%%        #{
-%%            <<"apiVersion">> := <<"core/v1a1">>,
-%%            <<"kind">> := <<"Event">>,
-%%            <<"involvedObject">> := #{
-%%                <<"apiVersion">> := <<"core/v1a1">>,
-%%                <<"domain">> := <<"root">>,
-%%                <<"kind">> := <<"User">>,
-%%                <<"name">> := <<"admin">>
-%%            },
-%%            <<"reason">> := <<"ActorCreated">>
-%%        },
-%%        #{
-%%            <<"kind">> := <<"Event">>,
-%%            <<"involvedObject">> := #{
-%%                <<"domain">> := <<"root">>,
-%%                <<"kind">> := <<"Domain">>,
-%%                <<"name">> := <<"root">>
-%%            },
-%%            <<"reason">> := <<"ActorCreated">>
-%%        },
-%%        #{<<"apiVersion">> := <<"core/v1a1">>,
-%%            <<"kind">> := <<"User">>,
-%%            <<"metadata">> := #{
-%%                <<"domain">> := <<"root">>,
-%%                <<"name">> := <<"admin">>
-%%            }
-%%        }
-%%    ] = List2,
-%%
-%%
-%%    % kind and no apiGroup
-%%    {400, #{<<"message">>:=<<"Missing field: 'apiGroup'">>}} = http_search("root", #{kind=>'User'}),
-%%
-%%    % kind and apiGroup, so we can use specific fields
-%%    Opts3 = #{
-%%        apiGroup => core,
-%%        kind => 'Event',
-%%        deep => true,
-%%        filter => #{
-%%            'and' => [
-%%                #{field=>reason, value=>'ActorCreated'}
-%%            ]
-%%        },
-%%        sort=>[
-%%            #{field=>'involvedObject.apiVersion', order=>asc},
-%%            #{field=>'involvedObject.kind', order=>asc},
-%%            #{field=>'metadata.updateTime', order=>desc}
-%%        ]
-%%    },
-%%    {3, 3, List3} = http_search("b.a-nktest", Opts3),
-%%    [
-%%        #{
-%%            <<"kind">> := <<"Event">>,
-%%            <<"involvedObject">> := #{
-%%                <<"apiVersion">> := <<"core/v1a1">>,
-%%                <<"kind">> := <<"Domain">>,
-%%                <<"domain">> := <<"b.a-nktest">>,
-%%                <<"name">> := <<"c">>
-%%            },
-%%            <<"reason">> := <<"ActorCreated">>
-%%        },
-%%        #{
-%%            <<"involvedObject">> := #{
-%%                <<"apiVersion">> := <<"core/v1a1">>,
-%%                <<"kind">> := <<"Domain">>,
-%%                <<"domain">> := <<"a-nktest">>,
-%%                <<"name">> := <<"b">>
-%%            }
-%%        },
-%%        #{
-%%            <<"involvedObject">> := #{
-%%                <<"apiVersion">> := <<"core/v1a1">>,
-%%                <<"domain">> := <<"b.a-nktest">>,
-%%                <<"kind">> := <<"User">>,
-%%                <<"name">> := <<"ut1">>
-%%            },
-%%            <<"reason">> := <<"ActorCreated">>
-%%        }
-%%    ] = List3,
-%%
-%%    % labels
-%%    OptsL1 = #{
-%%        filter => #{'and' => [
-%%            #{field=>'kind', value=>'Domain'},
-%%            #{field=>'metadata.labels.is_b_domain', op=>exists, value=>true}
-%%        ]}
-%%    },
-%%    {0, 0, []} = http_search("root", OptsL1),
-%%    {2, 2, [#{<<"metadata">>:=#{<<"name">>:=<<"c">>}}=C, #{<<"metadata">>:=#{<<"name">>:=<<"b">>}}=B]} =
-%%        http_search("root", OptsL1#{deep=>true}),  % B and C
-%%    % we can also filter using apiGroup and kind
-%%    OptsL2 = fun(V) ->
-%%        #{
-%%            apiGroup => core,
-%%            kind => 'Domain',
-%%            deep => true,
-%%            filter => #{'and' => [
-%%                #{field=>'metadata.labels.is_b_domain', op=>eq, value=>V}
-%%            ]},
-%%            sort => [#{field=>'metadata.updateTime', order=>asc}]
-%%        }
-%%    end,
-%%    {2, 2, [B, C]} = http_search("root", OptsL2(<<"true">>)),
-%%    {0, 0, []} = http_search("root", OptsL2(<<"false">>)),
-%%
-%%    % links
-%%    OptsI1 = #{
-%%        filter => #{'and' => [
-%%            #{field=>'kind', value=>'Domain'},
-%%            #{field=><<"metadata.links.", RootUID/binary>>, op=>exists, value=>true}
-%%        ]}
-%%    },
-%%    {1, 1, [A]} = http_search("root", OptsI1),
-%%    #{<<"metadata">>:=#{<<"name">>:=<<"a-nktest">>, <<"uid">>:=_UID_A}} = A,
-%%    OptsI2 = #{
-%%        deep => true,
-%%        filter => #{'and' => [
-%%            #{field=><<"metadata.links.", RootUID/binary>>, value=><<"io.netc.core.domain">>}
-%%        ]},
-%%        sort => [#{field=>'metadata.updateTime', order=>asc}]
-%%    },
-%%    {2, 2, [Admin, A]} = http_search("root", OptsI2),
-%%    #{<<"metadata">>:=#{<<"name">>:=<<"admin">>}} = Admin,
-%%
-%%    % FTS
-%%    OptsF1 = fun(D, F, Op, V) ->
-%%        #{
-%%            deep => D,
-%%            filter => #{'and' => [
-%%                #{field=>'kind', value=>'Domain'},
-%%                #{field=>F, op=>Op, value=>V}
-%%            ]}
-%%        }
-%%    end,
-%%    {1, 1, [A]} = http_search("root", OptsF1(false, 'metadata.fts.*', eq, <<"Domaín"/utf8>>)),
-%%    {3, 3, [C,B,A]} = http_search("root", OptsF1(true, 'metadata.fts.*', eq, <<"domain">>)),
-%%    {3, 3, [C,B,A]} = http_search("root", OptsF1(true, 'metadata.fts.*', prefix, <<"dOm">>)),
-%%    {1, 1, [B]} = http_search("root", OptsF1(true, 'metadata.fts.fts_domain', prefix, <<"b">>)),
-%%    OptsF2 = fun(D, F, Op, V) ->
-%%        #{
-%%            deep => D,
-%%            apiGroup => core,
-%%            kind => 'User',
-%%            filter => #{'and' => [
-%%                #{field=>F, op=>Op, value=>V}
-%%            ]}
-%%        }
-%%    end,
-%%    {0, 0, []} = http_search("root", OptsF2(true, 'metadata.fts.fts_domain', prefix, <<"b">>)),
-%%    {0, 0, []} = http_search("root", OptsF2(true, 'metadata.fts.fts_domain', prefix, <<"b">>)),
-%%    {1, 1, [#{<<"metadata">>:=#{<<"name">>:=<<"ut1">>}}=U1]} = http_search("root", OptsF2(true, 'metadata.fts.*', eq, <<"my">>)),
-%%
-%%    % delete
-%%    OptsD1 = #{
-%%        apiGroup => core,
-%%        kind => 'User'
-%%    },
-%%    {1, 1, [U1]} = http_search("b.a-nktest", OptsD1),
-%%    {200, #{<<"details">>:=#{<<"deleted">>:=1}}} = http_search_delete("b.a-nktest", OptsD1),
-%%    {200, #{<<"details">>:=#{<<"deleted">>:=0}}} = http_search_delete("b.a-nktest", OptsD1),
-%%    {0, 0, []} = http_search("b.a-nktest", OptsD1),
-%%    ok.
-%%
-%%
-%%contact_test() ->
-%%    % Create an contact
-%%    Body1 = <<"
-%%        apiVersion: core/v1a1
-%%        kind: Contact
-%%        spec:
-%%            name: 'My Náme'
-%%            surname: 'My Surname'
-%%            birthTime: 2018-01-01
-%%            gender: M
-%%            timezone: -1
-%%            url:
-%%                - url: url1
-%%                - url: url2
-%%                  type: type2
-%%                  meta:
-%%                    a: 1
-%%            phone:
-%%                - type: mobile
-%%                  phone: 123456
-%%                - type: fixed
-%%                  phone: 654321
-%%            email:
-%%                email: test@test.com
-%%            im:
-%%                - type: irc
-%%                  im: abc
-%%            address:
-%%                - type: home
-%%                  street: 'My street'
-%%                  code: 1234
-%%                  country: Spain
-%%            pubkey:
-%%                - type: github
-%%                  key: abcde
-%%                  meta:
-%%                    key1: val1
-%%            profile:
-%%                - type: type1
-%%                  startTime: 2017-01
-%%                  stopTime: 2018-02
-%%                  data:
-%%                    data1: val1
-%%                  meta:
-%%                    meta1: val1
-%%            photo:
-%%                - type: type2
-%%                  file: file2
-%%                  meta:
-%%                    meta2: val2
-%%            user: /apis/core/v1a1/domains/b.a-nktest/users/ut1
-%%        metadata:
-%%            name: ct1
-%%            domain: c.b.a-nktest
-%%            fts:
-%%                fullName: 'My Náme My Surname'
-%%    "/utf8>>,
-%%    Body2 = yaml(Body1),
-%%
-%%    {created, CT1} = req(#{verb=>create, body=>Body2}),
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=C_B_A_UID}}} = req(#{resource=>"domains", domain=>"b.a-nktest", name=>"c"}),
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=UT1_UID}}} = req(#{resource=>"users", domain=>"b.a-nktest", name=>"ut1"}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"Contact">>,
-%%        spec := #{
-%%            <<"user">> := <<"/apis/core/v1a1/domains/b.a-nktest/users/ut1">>,
-%%            <<"name">> := <<"My Náme"/utf8>>,
-%%            <<"surname">> := <<"My Surname">>,
-%%            <<"normalizedName">> := <<"my name">>,
-%%            <<"normalizedSurname">> := <<"my surname">>,
-%%            <<"birthTime">> := <<"2018-01-01T00:00:00Z">>,
-%%            <<"gender">> := <<"M">>,
-%%            <<"timezone">> := -1,
-%%            <<"url">> := [
-%%                #{<<"url">> := <<"url1">>},
-%%                #{
-%%                    <<"meta">> := #{<<"a">> := 1},
-%%                    <<"type">> := <<"type2">>,
-%%                    <<"url">> := <<"url2">>
-%%                }
-%%            ],
-%%            <<"phone">> := [
-%%                #{
-%%                    <<"type">> := <<"mobile">>,
-%%                    <<"phone">> := <<"123456">>
-%%                },
-%%                #{
-%%                    <<"type">> := <<"fixed">>,
-%%                    <<"phone">> := <<"654321">>
-%%                }
-%%            ],
-%%            <<"email">> := [
-%%                #{<<"email">> := <<"test@test.com">>}
-%%            ],
-%%            <<"im">> := [
-%%                #{
-%%                    <<"type">> := <<"irc">>,
-%%                    <<"im">> := <<"abc">>
-%%                }
-%%            ],
-%%            <<"address">> := [
-%%                #{
-%%                    <<"type">> := <<"home">>,
-%%                    <<"street">> := <<"My street">>,
-%%                    <<"code">> := <<"1234">>,
-%%                    <<"country">> := <<"Spain">>
-%%                }
-%%            ],
-%%            <<"pubkey">> := [
-%%                #{
-%%                    <<"type">> := <<"github">>,
-%%                    <<"key">> := <<"abcde">>,
-%%                    <<"meta">> := #{<<"key1">> := <<"val1">>}
-%%                }
-%%            ],
-%%            <<"profile">> := [
-%%                #{
-%%                    <<"type">> := <<"type1">>,
-%%                    <<"data">> := #{<<"data1">> := <<"val1">>},
-%%                    <<"meta">> := #{<<"meta1">> := <<"val1">>},
-%%                    <<"startTime">> := <<"2017-01-01T00:00:00Z">>,
-%%                    <<"stopTime">> := <<"2018-02-01T00:00:00Z">>
-%%                }
-%%            ],
-%%            <<"photo">> := [
-%%                #{
-%%                    <<"type">> := <<"type2">>,
-%%                    <<"file">> := <<"file2">>,
-%%                    <<"meta">> := #{<<"meta2">> := <<"val2">>}
-%%                }
-%%            ]
-%%        }=Spec1,
-%%        <<"metadata">> := #{
-%%            <<"uid">> := C1_UID,
-%%            <<"domain">> := <<"c.b.a-nktest">>,
-%%            <<"name">> := <<"ct1">>,
-%%            creation_time := <<"20", _/binary>> = T1,
-%%            update_time := <<"20", _/binary>> = T1,
-%%            <<"generation">> := 0,
-%%            hash := Rs1,
-%%            <<"selfLink">> := <<"/apis/core/v1a1/domains/c.b.a-nktest/contacts/ct1">>,
-%%            <<"links">> := #{
-%%                C_B_A_UID := <<"io.netc.core.domain">>,
-%%                UT1_UID := <<"io.netc.core.contact-user">>
-%%            },
-%%            <<"fts">> := #{
-%%                <<"fullName">> := <<"My Náme My Surname"/utf8>>
-%%            }
-%%        },
-%%        <<"status">> := #{<<"isActivated">>:=true}
-%%    } = CT1,
-%%
-%%    {error, #{<<"reason">>:= <<"uniqueness_violation">>}} = req(#{verb=>create, body=>Body2}),
-%%
-%%    Spec2 = maps:remove(<<"im">>, Spec1),
-%%    Body3 = maps:remove(<<"status">>, CT1#{spec:=Spec2}),
-%%    {ok, CT2} = req(#{verb=>update, body=>Body3}),
-%%    #{
-%%        spec := Spec2,
-%%        <<"metadata">> := #{
-%%            <<"uid">> := C1_UID,
-%%            creation_time := T1,
-%%            update_time := T2,
-%%            <<"generation">> := 1,
-%%            hash := Rs2
-%%        }
-%%    } = CT2,
-%%    true = Rs1 /= Rs2,
-%%    true = T2 > T1,
-%%
-%%    {error, #{<<"message">>:= <<"Field 'kind' is invalid">>}} = req(#{verb=>update, resource=>users, body=>Body3}),
-%%    {error, #{<<"message">>:= <<"Field 'metadata.name' is invalid">>}} = req(#{verb=>update, name=>name2, body=>Body3}),
-%%    {error, #{<<"message">>:= <<"Field 'metadata.domain' is invalid">>}} = req(#{verb=>update, domain=>"a-nktest", body=>Body3}),
-%%    {ok, _} = req(#{verb=>update, domain=>"c.b.a-nktest", resource=>"contacts", name=>"ct1", body=>Body3}),
-%%
-%%    {1, 1, [#{<<"metadata">>:=#{<<"uid">>:=C1_UID}}=CT3]} = http_list("/domains/c.b.a-nktest/contacts?linkedTo="++binary_to_list(UT1_UID)++":io.netc.core.contact-user"),
-%%    {0, 0, []} = http_list("/domains/c.b.a-nktest/contacts?linkedTo="++binary_to_list(UT1_UID)++":1"),
-%%    {1, 1, [CT3]} = http_list("/domains/c.b.a-nktest/contacts?fieldSelector=spec.gender:M&sort=spec.timezone"),
-%%    {0, 0, []} = http_list("/domains/c.b.a-nktest/contacts?fieldSelector=spec.gender:F"),
-%%    {1, 1, [CT3]} = http_list("/domains/c.b.a-nktest/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2007"),
-%%    {0, 0, []} = http_list("/domains/c.b.a-nktest/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2020"),
-%%
-%%%%    {422, _} = http_delete("/domains/b.a-nktest/users/ut1"),
-%%%%
-%%%%    % Remove link
-%%%%    Body4 = maps:remove(<<"status">>, CT1#{<<"metadata">>:=maps:remove(<<"links">>, Meta1)}),
-%%%%    {ok, _} = api(#{verb=>update, domain=>"c.b.a-nktest", resource=>"contacts", name=>"ct1", body=>Body4}),
-%%%%    {0, 0, []} = http_list("/domains/c.b.a-nktest/contacts?linkedTo=user:"++binary_to_list(UT1_UID)),
-%%%%    {200, _} = http_delete("/domains/b.a-nktest/users/ut1"),
-%%%%    {error, #{<<"reason">>:=<<"linked_actor_unknown">>}} = api(#{verb=>create, body=>Body2}),
-%%%%    {200, _} = http_delete("/domains/c.b.a-nktest/contacts/ct1"),
-%%    ok.
+
+list_test_2() ->
+    {0, 0, []} = http_list("/configmaps?sort=desc:metadata.updateTime"),
+    {1, 1, [CA]} = http_list("/namespaces/a.test.my_actors/configmaps"),
+    {3, 3, [CC, CB, CA]} = http_list("/configmaps?deep=true"),
+    {3, 2, [CC, CB]} = http_list("/configmaps?deep=true&size=2"),
+    {3, 2, [CB, CA]} = http_list("/configmaps?deep=true&size=2&from=1"),
+    {3, 0, []} = http_list("/configmaps?deep=true&size=0"),
+    {3, 3, [CA, CB, CC]} = http_list("/configmaps?sort=asc:metadata.updateTime&deep=true"),
+    {1, 1, [CA]} = http_list("/namespaces/a.test.my_actors/configmaps"),
+
+    {400, #{ <<"message">> := <<"Syntax error: 'size'">>}} = http_get("/configmaps?deep=true&size=-1"),
+
+    {0, 0,  []} = http_list("/users"),
+    {1, 1,  [UT1]} = http_list("/users?deep=true"),
+    {1, 1,  [UT1]} = http_list("/namespaces/b.a.test.my_actors/users"),
+
+
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"ConfigMap">>,
+        <<"metadata">> := #{
+            <<"creationTime">> := _,
+            <<"fts">> := #{<<"fts_class">> := <<"Domáin a"/utf8>>},
+            <<"generation">> := 0,
+            <<"labels">> := #{
+                  <<"is_a">> := <<"true">>
+            },
+            <<"name">> := <<"ca">>,
+            <<"namespace">> := <<"a.test.my_actors">>,
+            <<"resourceVersion">> := _,
+            <<"uid">> := CA_UID,
+            <<"updateTime">> := _
+        }
+    } = CA,
+
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"ConfigMap">>,
+        <<"metadata">> := #{
+            <<"fts">> := #{<<"fts_class">> := <<"Domáin b"/utf8>>},
+            <<"labels">> := #{
+                 <<"is_a">> := <<"true">>,
+                  <<"is_b">> := <<"true">>
+          },
+            <<"links">> := #{CA_UID := <<"my_link">>},
+            <<"name">> := <<"cb">>,
+            <<"namespace">> := <<"b.a.test.my_actors">>,
+            <<"uid">> := CB_UID
+        }
+    } = CB,
+
+    #{
+        <<"metadata">> := #{
+            <<"fts">> := #{<<"fts_class">> := <<"Domáin c"/utf8>>},
+            <<"labels">> := #{
+                <<"is_a">> := <<"true">>,
+                <<"is_b">> := <<"true">>,
+                <<"is_c">> := <<"true">>
+            },
+            <<"links">> := #{CB_UID := <<"my_link">>},
+            <<"name">> := <<"cc">>,
+            <<"namespace">> := <<"c.b.a.test.my_actors">>,
+            <<"uid">> := _
+        }
+    } = CC,
+
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"User">>,
+        <<"metadata">> := #{
+            <<"fts">> := #{<<"fts_name">> := <<"Úser MY name"/utf8>>},
+            <<"labels">> := #{
+                <<"is_a">> := <<"true">>,
+                <<"is_b">> := <<"true">>
+            },
+            <<"links">> := #{CB_UID := <<"my_link">>},
+            <<"name">> := <<"ut1">>,
+            <<"namespace">> := <<"b.a.test.my_actors">>,
+            <<"uid">> := _
+        },
+        <<"spec">> := #{<<"password">> := <<>>}
+    } = UT1,
+
+    % labels
+    {0, 0, []} = http_list("/configmaps?labelSelector=is_b"),
+    {2, 2, [CB, CC]} = http_list("/configmaps?labelSelector=is_b&deep=true&sort=asc:metadata.updateTime"),
+    {1, 1, [CC]} = http_list("/configmaps?labelSelector=is_b,is_c&deep=true"),
+    {0, 0, []} = http_list("/configmaps?labelSelector=is_b,is_c:false&deep=true"),
+    {2, 2, [CC, CB]} = http_list("/configmaps?labelSelector=is_b:true&deep=true"),
+    {0, 0, []} = http_list("/configmaps?labelSelector=is_b:false&deep=true"),
+    {1, 1, [CC]} = http_list("/namespaces/c.b.a.test.my_actors/configmaps?labelSelector=is_b"),
+
+    % links
+    {0, 0, []} = http_list("/configmaps?linkedTo="++binary_to_list(CA_UID)),
+    {1, 1, [CB]} = http_list("/configmaps?linkedTo="++binary_to_list(CA_UID)++"&deep=true"),
+    {1, 1, [CB]} = http_list("/configmaps?linkedTo="++binary_to_list(CA_UID)++":my_link&deep=true"),
+    {0, 0, []} = http_list("/configmaps?linkedTo="++binary_to_list(CA_UID)++":other&deep=true"),
+
+    % FTS
+    {0, 0, []} = http_list("/configmaps?fts=domain"),
+    {3, 3, [CC, CB, CA]} = http_list("/configmaps?fts=domain&deep=true"),
+    % Erlang21 does not accept utf8 in url in httpc
+    %{3, 3, [CC, CB, CA]} = http_list(<<"/configmaps?fts=dómain&deep=true"/utf8>>),
+    {3, 3, [CC, CB, CA]} = http_list("/configmaps?fts=dom%C3%A1in&deep=true"),
+    {3, 3, [CC, CB, CA]} = http_list("/configmaps?fts=dom*&deep=true"),
+    {1, 1, [CB]} = http_list("/configmaps?fts=b*&deep=true"),
+    {0, 0, []} = http_list("/configmaps?fts=name:b*&deep=true"),
+    {1, 1, [CB]} = http_list("/configmaps?fts=fts_class:b*&deep=true"),
+    {0, 0, []} = http_list("/users?fts=fts_class:b*&deep=true"),
+    {1, 1, [User1]} = http_list("/users?fts=my&deep=true"),
+    {1, 1, [User1]} = http_list("/users?fts=fts_name:my&deep=true"),
+    {0, 0, []} = http_list("/users?fts=fts_class:my&deep=true"),
+    ok.
+
+
+search_test() ->
+    % No apiVersion or kind, gets all objects but no special fields
+    {400, #{<<"reason">>:=<<"field_invalid">>}} =
+        http_search("test.my_actors", #{filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
+
+    Opts1 = #{
+        deep => true,
+        filter => #{
+            'and' => [#{field=>kind, op=>values, value=>['ConfigMap', 'User']}]
+        },
+        sort=>[
+            #{field=>kind, order=>asc},
+            #{field=>'metadata.updateTime', order=>desc}
+        ]
+    },
+    {4, 4, List1} = http_search("test.my_actors", Opts1),
+    [
+        #{
+            <<"apiVersion">> := <<"core/v1a1">>,
+            <<"kind">> := <<"ConfigMap">>,
+            <<"metadata">> := #{
+                <<"namespace">> := <<"c.b.a.test.my_actors">>,
+                <<"name">> := <<"cc">>
+            }
+        },
+        #{
+            <<"kind">> := <<"ConfigMap">>,
+            <<"metadata">> := #{
+                <<"namespace">> := <<"b.a.test.my_actors">>,
+                <<"name">> := <<"cb">>
+            }
+        },
+        #{
+            <<"kind">> := <<"ConfigMap">>,
+            <<"metadata">> := #{
+                <<"namespace">> := <<"a.test.my_actors">>,
+                <<"name">> := <<"ca">>,
+                <<"uid">> := CA_UID
+            }
+        },
+        #{
+            <<"kind">> := <<"User">>,
+            <<"spec">> := #{
+                <<"password">> := <<>>
+            },
+            <<"metadata">> := #{
+                <<"namespace">> := <<"b.a.test.my_actors">>,
+                <<"name">> := <<"ut1">>
+
+            }
+        }
+    ] = List1,
+
+    {409, #{<<"reason">>:=<<"service_not_found">>}} =
+        http_search("root", #{apiVersion=>core, filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
+
+    % apiVersion but no kind.
+    {400, #{<<"reason">>:=<<"field_invalid">>}} =
+        http_search("test.my_actors", #{apiVersion=>core, filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
+
+
+%%%%    Opts2 = #{
+%%%%        apiVersion => core,
+%%%%        filter => #{
+%%%%            'and' => [#{field=>kind, op=>gte, value=>'Event'}]
+%%%%        },
+%%%%        sort=>[
+%%%%            #{field=>kind, order=>asc},
+%%%%            #{field=>'metadata.updateTime', order=>desc}
+%%%%        ]
+%%%%    },
+%%%%    {3, 3, List2} = http_search("test.my_actors", Opts2),
+%%%%    [
+%%%%        #{
+%%%%            <<"apiVersion">> := <<"core/v1a1">>,
+%%%%            <<"kind">> := <<"Event">>,
+%%%%            <<"involvedObject">> := #{
+%%%%                <<"apiVersion">> := <<"core/v1a1">>,
+%%%%                <<"namespace">> := <<"test.my_actors">>,
+%%%%                <<"kind">> := <<"User">>,
+%%%%                <<"name">> := <<"admin">>
+%%%%            },
+%%%%            <<"reason">> := <<"ActorCreated">>
+%%%%        },
+%%%%        #{
+%%%%            <<"kind">> := <<"Event">>,
+%%%%            <<"involvedObject">> := #{
+%%%%                <<"namespace">> := <<"test.my_actors">>,
+%%%%                <<"kind">> := <<"ConfigMap">>,
+%%%%                <<"name">> := <<"test.my_actors">>
+%%%%            },
+%%%%            <<"reason">> := <<"ActorCreated">>
+%%%%        },
+%%%%        #{<<"apiVersion">> := <<"core/v1a1">>,
+%%%%            <<"kind">> := <<"User">>,
+%%%%            <<"metadata">> := #{
+%%%%                <<"namespace">> := <<"test.my_actors">>,
+%%%%                <<"name">> := <<"admin">>
+%%%%            }
+%%%%        }
+%%%%    ] = List2,
+
+
+    % kind and no apiVersion
+    {400, #{<<"message">>:=<<"Field 'apiVersion' is missing">>}} = http_search("test.my_actors", #{kind=>'User'}),
+
+    % kind and apiVersion, so we can use specific fields
+    Opts3 = #{
+        apiVersion => core,
+        kind => 'User',
+        deep => true
+    },
+    {1, 1, List3} = http_search("test.my_actors", Opts3),
+    [
+        #{
+            <<"kind">> := <<"User">>,
+            <<"spec">> := #{
+                <<"password">> := <<>>
+            },
+            <<"metadata">> := #{
+                <<"namespace">> := <<"b.a.test.my_actors">>,
+                <<"name">> := <<"ut1">>
+
+            }
+        }
+    ] = List3,
+
+    % labels
+    OptsL1 = #{
+        filter => #{'and' => [
+            #{field=>'kind', value=>'ConfigMap'},
+            #{field=>'metadata.labels.is_b', op=>exists, value=>true}
+        ]},
+        sort => [#{field=>'metadata.updateTime', order=>desc}]
+    },
+    {0, 0, []} = http_search("test.my_actors", OptsL1),
+
+    {2, 2, [#{<<"metadata">>:=#{<<"name">>:=<<"cc">>}}=C, #{<<"metadata">>:=#{<<"name">>:=<<"cb">>}}=B]} =
+        http_search("test.my_actors", OptsL1#{deep=>true}),  % B and C
+
+    % we can also filter using apiVersion and kind
+    OptsL2 = fun(V) ->
+        #{
+            apiVersion => core,
+            kind => 'ConfigMap',
+            deep => true,
+            filter => #{'and' => [
+                #{field=>'metadata.labels.is_b', op=>eq, value=>V}
+            ]},
+            sort => [#{field=>'metadata.updateTime', order=>asc}]
+        }
+    end,
+    {2, 2, [B, C]} = http_search("test.my_actors", OptsL2(<<"true">>)),
+    {0, 0, []} = http_search("test.my_actors", OptsL2(<<"true1">>)),
+
+    % links
+    OptsI1 = #{
+        filter => #{'and' => [
+            #{field=>'kind', value=>'ConfigMap'},
+            #{field=><<"metadata.links.", CA_UID/binary>>, op=>exists, value=>true}
+        ]}
+    },
+    {0, 0, []} = http_search("test.my_actors", OptsI1),
+    {1, 1, [B]} = http_search("b.a.test.my_actors", OptsI1),
+
+
+    % FTS
+    OptsF1 = fun(D, F, Op, V) ->
+        #{
+            deep => D,
+            filter => #{'and' => [
+                #{field=>'kind', value=>'ConfigMap'},
+                #{field=>F, op=>Op, value=>V}
+            ]},
+            sort => [#{field=>'metadata.updateTime', order=>desc}]
+        }
+    end,
+    {0, 0, []} = http_search("test.my_actors", OptsF1(false, 'metadata.fts.*', eq, <<"Domaín"/utf8>>)),
+    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', eq, <<"Domaín"/utf8>>)),
+    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', eq, <<"domain">>)),
+    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', prefix, <<"dOm">>)),
+    {1, 1, [B]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
+
+    OptsF2 = fun(D, F, Op, V) ->
+        #{
+            deep => D,
+            apiVersion => core,
+            kind => 'User',
+            filter => #{'and' => [
+                #{field=>F, op=>Op, value=>V}
+            ]},
+            sort => [#{field=>'metadata.updateTime', order=>desc}]
+        }
+    end,
+    {0, 0, []} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
+    {0, 0, []} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
+    {1, 1, [#{<<"metadata">>:=#{<<"name">>:=<<"ut1">>}}=U1]} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.*', eq, <<"my">>)),
+
+    % delete
+    OptsD1 = #{
+        apiVersion => core,
+        kind => 'User'
+    },
+    {1, 1, [U1]} = http_search("b.a.test.my_actors", OptsD1),
+    {200, #{<<"deleted">>:=1}} = http_search_delete("b.a.test.my_actors", OptsD1),
+    {200, #{<<"deleted">>:=0}} = http_search_delete("b.a.test.my_actors", OptsD1),
+    {0, 0, []} = http_search("b.a.test.my_actors", OptsD1),
+    ok.
+
+
+contact_test() ->
+    % Create an contact
+    Body1 = <<"
+        apiVersion: core/v1a1
+        kind: Contact
+        spec:
+            name: 'My Náme'
+            surname: 'My Surname'
+            birthTime: 2018-01-01
+            gender: M
+            timezone: -1
+            url:
+                - url: url1
+                - url: url2
+                  type: type2
+                  meta:
+                    a: 1
+            phone:
+                - type: mobile
+                  phone: 123456
+                - type: fixed
+                  phone: 654321
+            email:
+                email: test@test.com
+            im:
+                - type: irc
+                  im: abc
+            address:
+                - type: home
+                  street: 'My street'
+                  code: 1234
+                  country: Spain
+            pubkey:
+                - type: github
+                  key: abcde
+                  meta:
+                    key1: val1
+            profile:
+                - type: type1
+                  startTime: 2017-01
+                  stopTime: 2018-02
+                  data:
+                    data1: val1
+                  meta:
+                    meta1: val1
+            photo:
+                - type: type2
+                  file: file2
+                  meta:
+                    meta2: val2
+            user: /apis/core/v1a1/namespaces/b.a.test.my_actors/users/ut1
+        metadata:
+            name: ct1
+            namespace: c.b.a.test.my_actors
+            fts:
+                fullName: 'My Náme My Surname'
+            labels:
+                io.netk.core.contacts.phone: 123456
+    "/utf8>>,
+    Body2 = yaml(Body1),
+
+    {created, CT1} = kapi_req(#{verb=>create, body=>Body2, class=>nkactor_kapi}),
+    {ok, #{<<"metadata">>:=#{<<"uid">>:=UT1_UID}}} = kapi_req(#{resource=>"users", namespace=>"b.a.test.my_actors", name=>"ut1"}),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"Contact">>,
+        <<"spec">> := #{
+            <<"name">> := <<"My Náme"/utf8>>,
+            <<"surname">> := <<"My Surname">>,
+            <<"birthTime">> := <<"2018-01-01T00:00:00Z">>,
+            <<"gender">> := <<"M">>,
+            <<"timezone">> := -1,
+            <<"url">> := [
+                #{<<"url">> := <<"url1">>},
+                #{
+                    <<"meta">> := #{<<"a">> := 1},
+                    <<"type">> := <<"type2">>,
+                    <<"url">> := <<"url2">>
+                }
+            ],
+            <<"phone">> := [
+                #{
+                    <<"type">> := <<"mobile">>,
+                    <<"phone">> := <<"123456">>
+                },
+                #{
+                    <<"type">> := <<"fixed">>,
+                    <<"phone">> := <<"654321">>
+                }
+            ],
+            <<"email">> := [
+                #{<<"email">> := <<"test@test.com">>}
+            ],
+            <<"im">> := [
+                #{
+                    <<"type">> := <<"irc">>,
+                    <<"im">> := <<"abc">>
+                }
+            ],
+            <<"address">> := [
+                #{
+                    <<"type">> := <<"home">>,
+                    <<"street">> := <<"My street">>,
+                    <<"code">> := <<"1234">>,
+                    <<"country">> := <<"Spain">>
+                }
+            ],
+            <<"pubkey">> := [
+                #{
+                    <<"type">> := <<"github">>,
+                    <<"key">> := <<"abcde">>,
+                    <<"meta">> := #{<<"key1">> := <<"val1">>}
+                }
+            ],
+            <<"profile">> := [
+                #{
+                    <<"type">> := <<"type1">>,
+                    <<"data">> := #{<<"data1">> := <<"val1">>},
+                    <<"meta">> := #{<<"meta1">> := <<"val1">>},
+                    <<"startTime">> := <<"2017-01-01T00:00:00Z">>,
+                    <<"stopTime">> := <<"2018-02-01T00:00:00Z">>
+                }
+            ],
+            <<"photo">> := [
+                #{
+                    <<"type">> := <<"type2">>,
+                    <<"file">> := <<"file2">>,
+                    <<"meta">> := #{<<"meta2">> := <<"val2">>}
+                }
+            ],
+            <<"user">> := <<"/apis/core/v1a1/namespaces/b.a.test.my_actors/users/ut1">>
+        }=Spec1,
+        <<"status">> := #{
+            <<"normalizedName">> := <<"my name">>,
+            <<"normalizedSurname">> := <<"my surname">>
+        },
+        <<"metadata">> := #{
+            <<"namespace">> := <<"c.b.a.test.my_actors">>,
+            <<"name">> := <<"ct1">>,
+            <<"creationTime">> := <<"20", _/binary>> = T1,
+            <<"updateTime">> := <<"20", _/binary>> = T1,
+            <<"generation">> := 0,
+            <<"resourceVersion">> := Rs1,
+%%            %<<"selfLink">> := <<"/apis/core/v1a1/namespaces/c.b.a.test.my_actors/contacts/ct1">>,
+            <<"links">> := #{
+                UT1_UID := <<"io.netk.core.users">>
+            },
+            <<"fts">> := #{
+                <<"fullName">> := <<"My Náme My Surname"/utf8>>
+            },
+            <<"uid">> := C1_UID
+        }
+    } = CT1,
+
+    {error, #{<<"reason">>:= <<"uniqueness_violation">>}} = kapi_req(#{verb=>create, body=>Body2}),
+
+    Spec2 = maps:remove(<<"im">>, Spec1),
+    Body3 = maps:remove(<<"status">>, CT1#{<<"spec">>:=Spec2}),
+    {ok, CT2} = kapi_req(#{verb=>update, body=>Body3}),
+    #{
+        <<"spec">> := Spec2,
+        <<"metadata">> := #{
+            <<"uid">> := C1_UID,
+            <<"creationTime">> := T1,
+            <<"updateTime">> := T2,
+            <<"generation">> := 1,
+            <<"resourceVersion">> := Rs2
+        }
+    } = CT2,
+    true = Rs1 /= Rs2,
+    true = T2 > T1,
+
+    {error, #{<<"message">>:= <<"Field 'apiVersion' is invalid">>}} = kapi_req(#{verb=>update, group=>core2, body=>Body2}),
+    {error, #{<<"message">>:= <<"Field 'kind' is invalid">>}} = kapi_req(#{verb=>update, resource=>users, body=>Body2}),
+    {error, #{<<"message">>:= <<"Field 'metadata.name' is invalid">>}} = kapi_req(#{verb=>update, name=>name2, body=>Body2}),
+    {error, #{<<"message">>:= <<"Field 'metadata.namespace' is invalid">>}} = kapi_req(#{verb=>update, namespace=>"a-nktest", body=>Body2}),
+    {ok, _} = kapi_req(#{verb=>update, namespace=>"c.b.a.test.my_actors", resource=>"contacts", name=>"ct1", body=>Body2}),
+
+    {1, 1, [#{<<"metadata">>:=#{<<"uid">>:=C1_UID}}=CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":io.netk.core.users"),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":1"),
+    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M&sort=spec.timezone"),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:F"),
+    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2007"),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2020"),
+
+    {422, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
+
+    % Remove link
+    Body4 = maps:remove(<<"status">>, CT1#{<<"spec">>:=maps:remove(<<"user">>, Spec1)}),
+
+    {ok, _} = kapi_req(#{verb=>update, resource=>"contacts", name=>"ct1", body=>Body4}),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo=user:"++binary_to_list(UT1_UID)),
+    {200, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
+    {error, #{<<"reason">>:=<<"linked_actor_unknown">>}} = kapi_req(#{verb=>create, body=>Body2}),
+    {200, _} = http_delete("/namespaces/c.b.a.test.my_actors/contacts/ct1"),
+    ok.
 %%
 %%
 %%event_test() ->
@@ -874,22 +967,22 @@ list_test_1() ->
 %%    Start = nklib_date:now_3339(msecs),
 %%
 %%    #{d1:=D1, d2:=D2, d3:=D3, u1:=U1} = nkactor_core_test_util:test_data(),
-%%    {ok, #{<<"metadata">>:=RootMeta}} = req(#{resource=>"domains", name=>"root"}),
+%%    {ok, #{<<"metadata">>:=RootMeta}} = req(#{resource=>"domains", name=>"test.my_actors"}),
 %%    #{<<"uid">>:=RootUID} = RootMeta,
-%%    {ok, 'nkdomain-root', RootUID} = nkdomain_register:get_domain_data("root"),
+%%    {ok, 'nkdomain-root', RootUID} = nkdomain_register:get_domain_data("test.my_actors"),
 %%
-%%    % Watch on root domain
+%%    % Watch on root namespace
 %%    WatchRoot = http_watch("/domains/root"),
 %%
-%%    % Create domain NkTest
+%%    % Create namespace NkTest
 %%    {created, A1} = req(#{verb=>create, resource=>domains, name=>"a-nktest", body=>D1}),
 %%    #{<<"metadata">> := #{<<"uid">> := A_UID, hash:=AVsn}} = A1,
 %%
 %%    [{{nkdomain_api_http, Listen1}, _}] = nkdomain_api_core:get_watches(),
-%%    #actor_id{group=?GROUP_CORE, resource=?RES_CORE_DOMAINS, name= <<"root">>} = Listen1,
+%%    #actor_id{group=?GROUP_CORE, resource=?RES_CORE_DOMAINS, name= <<"test.my_actors">>} = Listen1,
 %%
-%%    % Event is generated at 'a' domain, but no one is watching yet
-%%    % It is also sent to a's domain, root where we are watching
+%%    % Event is generated at 'a' namespace, but no one is watching yet
+%%    % It is also sent to a's namespace, root where we are watching
 %%    {<<"ADDED">>, Ev1} = wait_http_event(WatchRoot, <<"ActorCreated">>),
 %%
 %%    #{
@@ -898,15 +991,15 @@ list_test_1() ->
 %%        <<"type">> := <<"Normal">>,
 %%        <<"reason">> := <<"ActorCreated">>,
 %%        <<"involvedObject">> := #{
-%%            <<"domain">> := <<"root">>,
-%%            <<"kind">> := <<"Domain">>,
+%%            <<"namespace">> := <<"test.my_actors">>,
+%%            <<"kind">> := <<"ConfigMap">>,
 %%            <<"name">> := <<"a-nktest">>,
 %%            <<"uid">> := A_UID,
 %%            hash := AVsn
 %%        },
 %%        <<"message">> := <<>>,
 %%        <<"metadata">> := #{
-%%            <<"domain">> := <<"a-nktest">>,
+%%            <<"namespace">> := <<"a-nktest">>,
 %%            <<"generation">> := 0,
 %%            <<"name">> := Ev1Name,
 %%            hash := _,
@@ -926,21 +1019,21 @@ list_test_1() ->
 %%
 %%    ok = nkdomain_api_events:wait_for_save(),
 %%    {ok, #{<<"items">>:=[Ev1]}} =
-%%        req(#{verb=>list, resource=>"events", domain=>"a-nktest", params=>#{fieldSelector=><<"involvedObject.uid:", A_UID/binary>>}}),
+%%        req(#{verb=>list, resource=>"events", namespace=>"a-nktest", params=>#{fieldSelector=><<"involvedObject.uid:", A_UID/binary>>}}),
 %%
-%%    % Now 'root' domain generates an event
+%%    % Now 'root' namespace generates an event
 %%    nkactor:async_op("/root/core/domains/root", {send_event, test_api}),
 %%    {<<"ADDED">>, Ev2} = wait_http_event(WatchRoot, <<"TestAPI">>),
 %%    #{
 %%        <<"reason">> := <<"TestAPI">>,
 %%        <<"involvedObject">> := #{
-%%            <<"domain">> := <<"root">>,
-%%            <<"kind">> := <<"Domain">>,
-%%            <<"name">> := <<"root">>,
+%%            <<"namespace">> := <<"test.my_actors">>,
+%%            <<"kind">> := <<"ConfigMap">>,
+%%            <<"name">> := <<"test.my_actors">>,
 %%            <<"uid">> := RootUID
 %%        },
 %%        <<"metadata">> := #{
-%%            <<"domain">> := <<"root">>,
+%%            <<"namespace">> := <<"test.my_actors">>,
 %%            <<"generation">> := 0,
 %%            <<"name">> := Ev2Name,
 %%            hash := Ev2RV,
@@ -955,7 +1048,7 @@ list_test_1() ->
 %%    } = Ev2,
 %%
 %%    ok = nkdomain_api_events:wait_for_save(),
-%%    {ok, Ev1} = req(#{resource=>events, domain=>"a-nktest", name=>Ev1Name, params=>#{activate=>false}}),
+%%    {ok, Ev1} = req(#{resource=>events, namespace=>"a-nktest", name=>Ev1Name, params=>#{activate=>false}}),
 %%
 %%    nkactor:async_op("/root/core/domains/root", {send_event, test_api}),
 %%    {<<"MODIFIED">>, Ev3} = wait_http_event(WatchRoot, <<"TestAPI">>),
@@ -965,7 +1058,7 @@ list_test_1() ->
 %%            <<"uid">> := RootUID
 %%        },
 %%        <<"metadata">> := #{
-%%            <<"domain">> := <<"root">>,
+%%            <<"namespace">> := <<"test.my_actors">>,
 %%            <<"generation">> := 1,
 %%            <<"name">> := Ev2Name,
 %%            hash := Ev3RV,
@@ -982,9 +1075,9 @@ list_test_1() ->
 %%    true = Time3 > CT2,
 %%    true = Ev2RV /= Ev3RV,
 %%
-%%    % Listen on domain a-nktest, and again only for user events
+%%    % Listen on namespace a-nktest, and again only for user events
 %%    WatchA = api_watch(#{resource=>domains, name=>"a-nktest"}),
-%%    WatchAU = api_watch(#{domain=>"a-nktest", resource=>users}),
+%%    WatchAU = api_watch(#{namespace=>"a-nktest", resource=>users}),
 %%    timer:sleep(100),
 %%    [
 %%        {{nkdomain_api_http, Listen1}, _},
@@ -992,20 +1085,20 @@ list_test_1() ->
 %%        {{nkdomain_test_util, Listen3}, _}
 %%    ] = lists:sort(nkdomain_api_core:get_watches()),
 %%
-%%    % Domain A generates an event
-%%    % The same event is sent to itself and it's domain, "root"
+%%    % ConfigMap A generates an event
+%%    % The same event is sent to itself and it's namespace, "test.my_actors"
 %%    nkactor:async_op("/root/core/domains/a-nktest", {send_event, test_api}),
 %%
 %%    {<<"ADDED">>, Ev4} = wait_api_event(WatchA, <<"TestAPI">>),
-%%    % Domain receives a copy of the event
+%%    % ConfigMap receives a copy of the event
 %%    {<<"ADDED">>, Ev4} = wait_http_event(WatchRoot, <<"TestAPI">>),
 %%
 %%
 %%    % Create b.a-nktest
-%%    {created, B_A} = req(#{verb=>create, domain=>"a-nktest", resource=>"domains", name=>"b", body=>D2}),
+%%    {created, B_A} = req(#{verb=>create, namespace=>"a-nktest", resource=>"domains", name=>"b", body=>D2}),
 %%    #{<<"metadata">> := #{<<"uid">> := B_A_UID}} = B_A,
 %%
-%%    % 'a' receives a copy of the event as its domain, and also escalates it to it's domain, "root"
+%%    % 'a' receives a copy of the event as its namespace, and also escalates it to it's namespace, "test.my_actors"
 %%    {<<"ADDED">>, Ev5} = wait_api_event(WatchA, <<"ActorCreated">>),
 %%    #{<<"involvedObject">> := #{<<"uid">> := B_A_UID}} = Ev5,
 %%    {<<"ADDED">>, Ev5} = wait_http_event(WatchRoot, <<"ActorCreated">>),
@@ -1018,11 +1111,11 @@ list_test_1() ->
 %%    {ok, #{<<"items">>:=[]}} =
 %%        req(#{verb=>list, resource=>"events", params=>#{fieldSelector=>FS_B_A_UID}}),
 %%    {ok, #{<<"items">>:=[Ev5]}} =
-%%        req(#{verb=>list, domain=>"b.a-nktest", resource=>"events", params=>#{fieldSelector=>FS_B_A_UID}}),
+%%        req(#{verb=>list, namespace=>"b.a-nktest", resource=>"events", params=>#{fieldSelector=>FS_B_A_UID}}),
 %%
 %%
 %%    % Create c.b.a-nktest
-%%    {created, C_B_A} = req(#{verb=>create, domain=>"b.a-nktest", resource=>"domains", name=>"c", body=>D3}),
+%%    {created, C_B_A} = req(#{verb=>create, namespace=>"b.a-nktest", resource=>"domains", name=>"c", body=>D3}),
 %%    #{<<"metadata">> := #{<<"uid">> := C_B_A_UID}} = C_B_A,
 %%    {<<"ADDED">>, Ev6} = wait_api_event(WatchA, <<"ActorCreated">>),
 %%    #{<<"involvedObject">> := #{<<"uid">> := C_B_A_UID}} = Ev6,
@@ -1035,7 +1128,7 @@ list_test_1() ->
 %%    {<<"ADDED">>, Ev6b} = wait_http_event(WatchRoot, <<"TestAPI">>),
 %%
 %%    % Create ut1
-%%    {created, U1_B_A} = req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut1", body=>U1}),
+%%    {created, U1_B_A} = req(#{verb=>create, namespace=>"b.a-nktest", resource=>users, name=>"ut1", body=>U1}),
 %%    #{<<"metadata">> := #{<<"uid">> := U1_B_A_UID}} = U1_B_A,
 %%    {<<"ADDED">>, Ev7} = wait_api_event(WatchA, <<"ActorCreated">>),
 %%    {<<"ADDED">>, Ev7} = wait_api_event(WatchAU, <<"ActorCreated">>),
@@ -1044,7 +1137,7 @@ list_test_1() ->
 %%    %#{<<"involvedObject">>:=#{<<"isActivated">>:=true}} = Ev7,
 %%
 %%    % Listen on U1
-%%    WatchU1 = api_watch(#{domain=>"b.a-nktest", resource=>users, name=>ut1}),
+%%    WatchU1 = api_watch(#{namespace=>"b.a-nktest", resource=>users, name=>ut1}),
 %%    timer:sleep(100),
 %%    [
 %%        {{nkdomain_api_http, Listen1}, _},
@@ -1066,10 +1159,10 @@ list_test_1() ->
 %%
 %%    nkdomain_api_events:wait_for_save(),    % Ensure it is just saved
 %%
-%%    % Let's start a new watch, over 'b' domain, but only for events after Ev6b
+%%    % Let's start a new watch, over 'b' namespace, but only for events after Ev6b
 %%    % We need deep because that resource belongs to an event in "c"
 %%    #{<<"metadata">>:=#{hash:=Ev6bRV}} = Ev6b,
-%%    WatchB = api_watch(#{domain=>"a-nktest", resource=>domains, name=>"b", params=>#{deep=>true, resourceVersion=>Ev6bRV}}),
+%%    WatchB = api_watch(#{namespace=>"a-nktest", resource=>domains, name=>"b", params=>#{deep=>true, resourceVersion=>Ev6bRV}}),
 %%    timer:sleep(100),
 %%    5 = length(nkdomain_api_core:get_watches()),
 %%
@@ -1091,7 +1184,7 @@ list_test_1() ->
 %%
 %%    % Perform an update
 %%    Upd1 = #{spec => #{<<"password">>=><<"pass2">>}},
-%%    {ok, _} = req(#{verb=>update, domain=>"b.a-nktest", resource=>users, name=>ut1, body=>Upd1}),
+%%    {ok, _} = req(#{verb=>update, namespace=>"b.a-nktest", resource=>users, name=>ut1, body=>Upd1}),
 %%    {<<"ADDED">>, Ev9} = wait_api_event(WatchU1, <<"ActorUpdated">>),
 %%    {<<"ADDED">>, Ev9} = wait_api_event(WatchA, <<"ActorUpdated">>),
 %%    {<<"ADDED">>, Ev9} = wait_api_event(WatchAU, <<"ActorUpdated">>),
@@ -1101,7 +1194,7 @@ list_test_1() ->
 %%
 %%    % Perform a delete
 %%    timer:sleep(100),   % Wait for the update, the delete is quicker
-%%    {ok, _} = req(#{verb=>delete, domain=>"b.a-nktest", resource=>users, name=>ut1}),
+%%    {ok, _} = req(#{verb=>delete, namespace=>"b.a-nktest", resource=>users, name=>ut1}),
 %%    {<<"ADDED">>, Ev10} = wait_api_event(WatchU1, <<"ActorDeleted">>),
 %%    {<<"ADDED">>, Ev10} = wait_api_event(WatchA, <<"ActorDeleted">>),
 %%    {<<"ADDED">>, Ev10} = wait_api_event(WatchAU, <<"ActorDeleted">>),
@@ -1117,16 +1210,16 @@ list_test_1() ->
 %%    {ok, #{<<"items">>:=[]}} =
 %%        req(#{verb=>list, resource=>"events", params=>#{fieldSelector=>FS_U1_B_A_UID}}),
 %%    {ok, #{<<"items">>:=[]}} =
-%%        req(#{verb=>list, domain=>"a-nktest", resource=>"events", params=>#{fieldSelector=>FS_U1_B_A_UID}}),
+%%        req(#{verb=>list, namespace=>"a-nktest", resource=>"events", params=>#{fieldSelector=>FS_U1_B_A_UID}}),
 %%    {ok, #{<<"items">>:=[Ev10,Ev9,Ev8,Ev7]}} =
-%%        req(#{verb=>list, domain=>"b.a-nktest", resource=>"events", params=>#{fieldSelector=>FS_U1_B_A_UID}}),
+%%        req(#{verb=>list, namespace=>"b.a-nktest", resource=>"events", params=>#{fieldSelector=>FS_U1_B_A_UID}}),
 %%
 %%
 %%    timer:sleep(100),
 %%    4 = length(nkdomain_api_core:get_watches()),
 %%
 %%    % Create /b.a-nktest/users/ut1, without activation
-%%    {created, _} = req(#{verb=>create, domain=>"b.a-nktest", resource=>users, name=>"ut1",
+%%    {created, _} = req(#{verb=>create, namespace=>"b.a-nktest", resource=>users, name=>"ut1",
 %%        body=>U1, params=>#{activate=>false}}),
 %%
 %%    {<<"ADDED">>, Ev11} = wait_api_event(WatchA, <<"ActorCreated">>),
@@ -1139,7 +1232,7 @@ list_test_1() ->
 %%
 %%    % Perform a delete over a non-activated object
 %%    % resourceVersion in involvedObject would be <<>> for non-activated objects
-%%    {ok, _} = req(#{verb=>delete, domain=>"b.a-nktest", resource=>users, name=>ut1}),
+%%    {ok, _} = req(#{verb=>delete, namespace=>"b.a-nktest", resource=>users, name=>ut1}),
 %%    {<<"ADDED">>, Ev12} = wait_api_event(WatchA, <<"ActorDeleted">>),
 %%    {<<"ADDED">>, Ev12} = wait_api_event(WatchAU, <<"ActorDeleted">>),
 %%    {<<"ADDED">>, Ev12} = wait_http_event(WatchRoot, <<"ActorDeleted">>),
@@ -1166,7 +1259,7 @@ list_test_1() ->
 %%                #{field => <<"resource">>, value => <<"events">>}
 %%            ]
 %%        },
-%%        domain => <<"a-nktest">>,
+%%        namespace => <<"a-nktest">>,
 %%        size => 100
 %%    },
 %%
@@ -1199,14 +1292,14 @@ list_test_1() ->
 %%
 
 search_resources(Group, Opts) ->
-    nkactor:search_resources(my_actors, Group, Opts).
+    nkactor:search_resources(?ACTOR_SRV, Group, Opts).
 
 search_linked_to(Id, Opts) ->
-    nkactor:search_linked_to(my_actors, Id, Opts).
+    nkactor:search_linked_to(?ACTOR_SRV, Id, Opts).
 
 search_fts(Word, Opts) ->
-    nkactor:search_fts(my_actors, Word, Opts).
+    nkactor:search_fts(?ACTOR_SRV, Word, Opts).
 
 search(Spec) ->
-    nkactor:search_actors(my_actors, Spec).
+    nkactor:search_actors(?ACTOR_SRV, Spec, #{}).
 

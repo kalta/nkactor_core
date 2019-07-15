@@ -41,7 +41,7 @@ config() ->
         verbs => [delete, deletecollection, get, list, watch],
         short_names => [ev],
         activable => false,
-        filter_fields => [
+        fields_filter => [
             reason,
             count,
             first_timestamp,
@@ -54,7 +54,7 @@ config() ->
             'obj.subtype',
             'obj.hash'
         ],
-        sort_fields => [
+        fields_sort => [
             reason,
             count,
             first_timestamp,
@@ -65,7 +65,7 @@ config() ->
             'obj.name',
             'obj.subtype'
         ],
-        field_type => #{
+        fields_type => #{
             count => integer
         }
     }.

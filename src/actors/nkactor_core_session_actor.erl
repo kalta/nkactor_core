@@ -67,7 +67,7 @@ parse(Actor, _ApiReq) ->
 
 
 %% @doc
-request(get, [<<"_rpc">>, <<"refresh">>], ActorId, _Req) ->
+request(get, <<"_rpc/refresh">>, ActorId, _Req) ->
     case nkactor:sync_op(ActorId, refresh) of
         ok ->
             {status, actor_updated};

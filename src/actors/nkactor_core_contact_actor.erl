@@ -25,7 +25,6 @@
 -behavior(nkactor_actor).
 
 -export([config/0, parse/2]).
--export([parse_post_check/1]).
 
 -include("nkactor_core.hrl").
 
@@ -43,59 +42,72 @@ config() ->
         versions => [<<"0">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch],
         short_names => [ct],
-        filter_fields => [
+        fields_filter => [
             'spec.name',
             'spec.surname',
-            'spec.normalized_name',
-            'spec.normalized_surname',
             'spec.birth_time',
             'spec.gender',
             'spec.timezone',
-            'spec.phone'
+            'spec.phone',
+            'status.normalized_name',
+            'status.normalized_surname'
         ],
-        sort_fields => [
-            'spec.normalized_name',
-            'spec.normalized_surname',
+        fields_sort => [
             'spec.gender',
             'spec.birth_time',
-            'spec.timezone'
+            'spec.timezone',
+            'status.normalized_name',
+            'status.normalized_surname'
         ],
-        field_type => #{
+        fields_type => #{
             'spec.timezone' => integer
+        },
+        fields_trans => #{
+            'spec.birthTime' => 'spec.birth_time',
+            'spec.profile.startTime' => 'spec.profile.start_time',
+            'spec.profile.stopTime' => 'spec.profile.stop_time',
+            'status.normalizedName' => 'status.normalized_name',
+            'status.normalizedSurname' => 'status.normalized_surname'
         }
     }.
 
 
 %% @doc
+%% Valid for normal and CamelCase
 parse(Actor, #{srv:=SrvId}) ->
-    Spec = #{
-        name => binary,
-        surname => binary,
-        birth_time => date_3339,
-        gender => {binary, [<<"M">>, <<"F">>]},
-        timezone => integer,
-        url => #{
-            '__key_binary' => #{
+    Syntax = #{
+        spec => #{
+            name => binary,
+            surname => binary,
+            birth_time => date_3339,
+            birthTime => {'__key', birth_time, date_3339},
+            gender => {binary, [<<"M">>, <<"F">>]},
+            timezone => integer,
+            url => {list, #{
+                url => binary,
                 type => binary,
-                meta => map
-        }},
-        phone => #{
-            '__key_binary' => #{
+                meta => map,
+                '__mandatory' => [url]
+            }},
+            phone => {list, #{
+                phone => binary,
                 type => binary,
-                meta => map
-        }},
-        email => #{
-            '__key_binary' => #{
+                meta => map,
+                '__mandatory' => [phone]
+            }},
+            email => {list, #{
+                email => binary,
                 type => binary,
-                meta => map
-        }},
-        im => #{
-            '__key_binary' => #{
+                meta => map,
+                '__mandatory' => [email]
+            }},
+            im => {list, #{
+                im => binary,
                 type => binary,
-                meta => map
-        }},
-        address => #{
-            '__key_binary' => #{
+                meta => map,
+                '__mandatory' => [im]
+            }},
+            address => {list, #{
                 type => binary,
                 street => binary,
                 code => binary,
@@ -104,43 +116,52 @@ parse(Actor, #{srv:=SrvId}) ->
                 state => binary,
                 country => binary,
                 meta => map
-        }},
-        pubkey => #{
-            '__key_binary' => #{
-                type => binary,
+            }},
+            pubkey => {list, #{
                 key => binary,
+                type => binary,
                 meta => map,
                 '__mandatory' => [key]
-        }},
-        profile => #{
-            '__key_binary' => #{
+            }},
+            profile => {list, #{
                 type => binary,
                 start_time => date_3339,
+                startTime => {'__key', start_time, date_3339},
                 stop_time => date_3339,
+                stopTime => {'__key', stop_time, date_3339},
                 data => map,
                 meta => map,
                 '__mandatory' => [data]
-        }},
-        photo => #{
-            '__key_binary' => #{
+            }},
+            photo => {list, #{
                 type => binary,
                 file => binary,
                 meta => map,
                 '__mandatory' => [file]
-        }},
-        % It is always calculated
-        normalized_name => binary,
-        normalized_surname => binary,
-        user => binary,
-        '__post_check' => fun ?MODULE:parse_post_check/1
+            }},
+            user => binary
+        },
+        status => #{
+            normalized_name => binary,
+            normalized_surname => binary
+        }
     },
-    case nkactor_lib:parse_actor_data(Actor, #{spec=>Spec}) of
+    case nkactor_lib:parse_actor_data(Actor, Syntax) of
         {ok, Actor2} ->
-            add_user_link(SrvId, Actor2);
+            Data = maps:get(data, Actor2, #{}),
+            Spec = maps:get(spec, Data, #{}),
+            Name = maps:get(name, Spec, <<>>),
+            SurName = maps:get(surname, Spec, <<>>),
+            Status1 = maps:get(status, Data, #{}),
+            Status2 = Status1#{
+                normalized_name => nklib_parse:normalize(Name),
+                normalized_surname => nklib_parse:normalize(SurName)
+            },
+            Actor3 = Actor2#{data=>Data#{status=>Status2}},
+            add_user_link(SrvId, Actor3);
         {error, Error} ->
             {error, Error}
     end.
-
 
 
 
@@ -150,28 +171,14 @@ parse(Actor, #{srv:=SrvId}) ->
 
 
 %% @private
-add_user_link(_SrvId, #{data:=#{spec:=#{user:=UserId}}}=Actor) ->
-    case nkactor_lib:add_link(UserId, ?GROUP_CORE, ?RES_CORE_USERS, Actor) of
-        {ok, Actor2} ->
-            {ok, Actor2};
-        {error, Error} ->
-            {error, Error}
-    end;
-
 add_user_link(_SrvId, Actor) ->
-    {ok, Actor}.
-
-
-%% @private
-parse_post_check(List) ->
-    Map1 = maps:from_list(List),
-    Name = maps:get(name, Map1, <<>>),
-    SurName = maps:get(surname, Map1, <<>>),
-    Map2 = Map1#{
-        normalized_name => nklib_parse:normalize(Name),
-        normalized_surname => nklib_parse:normalize(SurName)
-    },
-    {ok, maps:to_list(Map2)}.
+    Actor2 = nkactor_lib:rm_links(?GROUP_CORE, ?RES_CORE_USERS, Actor),
+    case Actor2 of
+        #{data:=#{spec:=#{user:=UserId}}} ->
+            nkactor_lib:add_link(UserId, ?GROUP_CORE, ?RES_CORE_USERS, Actor);
+        _ ->
+            {ok, Actor2}
+    end.
 
 
 %%%% @private

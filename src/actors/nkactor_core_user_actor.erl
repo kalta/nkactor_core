@@ -25,7 +25,7 @@
 -behavior(nkactor_actor).
 
 -export([op_check_pass/2]).
--export([config/0, parse/2, sync_op/3, get/2, request/4]).
+-export([config/0, parse/2, unparse/2, get/2, request/4, sync_op/3]).
 -export([store_pass/1]).
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -75,7 +75,19 @@ parse(_Actor, _Req) ->
 
 
 %% @doc
-request(get, [<<"_rpc">>, <<"checkpass">>], ActorId, Req) ->
+unparse(Actor, _Req) ->
+    case Actor of
+        #{data:=#{<<"spec">>:=#{<<"password">>:=_}=Spec}=Data} ->
+            Actor2 = Actor#{data:=Data#{<<"spec">>:=Spec#{<<"password">>:=<<>>}}},
+            {ok, Actor2};
+        _ ->
+            continue
+    end.
+
+
+
+%% @doc
+request(get, <<"_rpc/checkpass">>, ActorId, Req) ->
     SpanId = maps:get(ot_span_id, Req, undefined),
     nkserver_ot:log(SpanId, <<"User: check_pass">>),
     Syntax = #{password => binary, '__mandatory'=>password},

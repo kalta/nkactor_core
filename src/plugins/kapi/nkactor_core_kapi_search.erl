@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Default callbacks for plugin definitions
--module(nkactor_core_api_search).
+-module(nkactor_core_kapi_search).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -export([search/2]).
 

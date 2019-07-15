@@ -55,15 +55,15 @@ config() ->
         versions => [<<"0">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch],
         auto_activate => true,
-        filter_fields => [
+        fields_filter => [
             'status.last_try_start_time',
             'status.tries'
         ],
-        sort_fields => [
+        fields_sort => [
             'status.last_try_start_time',
             'status.tries'
         ],
-        field_type => #{
+        fields_type => #{
             'status.tries' => integer
         }
     }.
@@ -105,7 +105,7 @@ parse(Actor, _Req) ->
 
 
 %% @doc
-request(update, [<<"_state">>], ActorId, Req) ->
+request(update, <<"_state">>, ActorId, Req) ->
     Body = maps:get(body, Req, #{}),
     case nkactor:sync_op(ActorId, {update_state, Body}) of
         ok ->

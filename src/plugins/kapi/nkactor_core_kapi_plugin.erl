@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Default callbacks for plugin definitions
--module(nkactor_core_api_plugin).
+-module(nkactor_core_kapi_plugin).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -export([plugin_deps/0]).
 
@@ -31,19 +31,4 @@
 
 %% @doc 
 plugin_deps() ->
-	[nkactor_api].
-
-
-%%%% @doc
-%%plugin_config(_SrvId, Config, #{class := <<"Rest">>}) ->
-%%	Syntax = #{
-%%		debug => boolean
-%%	},
-%%	nkserver_util:parse_config(Config, Syntax).
-%%
-%%
-%%plugin_cache(_SrvId, Config, _Service) ->
-%%	Cache = #{
-%%		debug => maps:get(debug, Config, false)
-%%	},
-%%	{ok, Cache}.
+	[nkactor_kapi].

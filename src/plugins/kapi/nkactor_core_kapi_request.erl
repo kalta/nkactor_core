@@ -19,37 +19,13 @@
 %% -------------------------------------------------------------------
 
 %% @doc Default callbacks for plugin definitions
--module(nkactor_core_api_request).
+-module(nkactor_core_kapi_request).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
--export([request/3]).
--export([actor_to_api_actor/3, api_actor_to_actor/3]).
+-export([api_actor_to_actor/3]).
 
 %% ===================================================================
 %%
 %% ===================================================================
-
-
-request(_SrvId, Vsn, #{verb:=Verb, srv:=ActorSrvId}=ApiReq) ->
-	try
-		_SubRes = maps:get(subresource, ApiReq, []),
-		Reply = nkactor_request:request(ApiReq),
-		case Reply of
-			{ok, Data, _ApiReq2} when Verb==get ->
-				ApiActor = actor_to_api_actor(ActorSrvId, Vsn, Data),
-				lager:error("NKLOG BACK ~p", [api_actor_to_actor(ActorSrvId, ApiReq, ApiActor)]),
-				{ok, ApiActor}
-
-
-
-		end
-	catch
-		C:E:Trace ->
-			lager:error("Error in request ~p", [{C, {E, Trace}}]),
-			erlang:raise(C, E, Trace)
-	end.
-
-
-
 
 api_actor_to_actor(SrvId, Req, ApiActor) ->
 	try
@@ -150,62 +126,10 @@ api_actor_to_actor_syntax() ->
 
 
 
-actor_to_api_actor(ActorSrvId, Vsn, Actor) ->
-	#{uid:=UID, group:=Group, resource:=Res, name:=Name, namespace:=Namespace} = Actor,
-	Module = nkactor_actor:get_module(ActorSrvId, Group, Res),
-	Config = nkactor_actor:get_config(ActorSrvId, Module),
-	#{camel:=Camel} = Config,
-	{ok, ApiActor, _} = nklib_syntax:parse(Actor, actor_to_api_actor_syntax()),
-	Data1 = maps:get(data, Actor, #{}),
-	Data2 = [{to_bin(K), V} || {K, V}<- maps:to_list(Data1)],
-	Data3 = maps:from_list(Data2),
-	ApiActor2 = maps:merge(ApiActor, Data3),
-	#{<<"metadata">>:=Meta1} = ApiActor,
-	Meta2 = Meta1#{
-		<<"uid">> => UID,
-		<<"name">> => Name,
-		<<"namespace">> => Namespace
-	},
-	ApiVsn = <<Group/binary, $/, Vsn/binary>>,
-	ApiActor2#{
-		<<"apiVersion">> => ApiVsn,
-		<<"kind">> => Camel,
-		<<"metadata">>:=Meta2
-	}.
 
 
 
 
-actor_to_api_actor_syntax() ->
-	#{
-		metadata => {'__key', <<"metadata">>, #{
-			subtype => {'__key', <<"subtype">>},
-			hash => {'__key', <<"resourceVersion">>},
-			generation => {'__key', <<"generation">>},
-			creation_time => {'__key', <<"creationTime">>},
-			update_time => {'__key', <<"updateTime">>},
-			is_active => {'__key', <<"isActive">>},
-			expires_time => {'__key', <<"expiresTime">>},
-			labels => {'__key', <<"labels">>},
-			fts => {'__key', <<"fts">>},
-			links => {'__key', <<"links">>},
-			annotations => {'__key', <<"annotations">>},
-			is_enabled => {'__key', <<"isEnabled">>},
-			in_alarm => {'__key', <<"inAlaram">>},
-			alarms => {'__key', <<"alarms">>},
-			next_status_time => {'__key', <<"nextStatusTime">>},
-			description => {'__key', <<"description">>},
-			trace_id => {'__key', <<"trace_id">>}
-		}}
-	}.
-
-
-
-
-
-
-
-
-%% @private
-to_bin(Term) when is_binary(Term) -> Term;
-to_bin(Term) -> nklib_util:to_binary(Term).
+%%%% @private
+%%to_bin(Term) when is_binary(Term) -> Term;
+%%to_bin(Term) -> nklib_util:to_binary(Term).
