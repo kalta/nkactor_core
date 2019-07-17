@@ -54,7 +54,7 @@ parse(Actor, _ApiReq) ->
         data => map,
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor_data(Actor, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
         {ok, #{data:=Data2, metadata:=Meta2}=Actor2} ->
             #{spec:=#{ttl_secs:=Secs}} = Data2,
             Now = nklib_date:epoch(msecs),

@@ -39,7 +39,7 @@
 config() ->
     #{
         resource => ?RES_CORE_CONTACTS,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch],
         short_names => [ct],
         fields_filter => [
@@ -61,13 +61,6 @@ config() ->
         ],
         fields_type => #{
             'spec.timezone' => integer
-        },
-        fields_trans => #{
-            'spec.birthTime' => 'spec.birth_time',
-            'spec.profile.startTime' => 'spec.profile.start_time',
-            'spec.profile.stopTime' => 'spec.profile.stop_time',
-            'status.normalizedName' => 'status.normalized_name',
-            'status.normalizedSurname' => 'status.normalized_surname'
         }
     }.
 
@@ -80,7 +73,6 @@ parse(Actor, #{srv:=SrvId}) ->
             name => binary,
             surname => binary,
             birth_time => date_3339,
-            birthTime => {'__key', birth_time, date_3339},
             gender => {binary, [<<"M">>, <<"F">>]},
             timezone => integer,
             url => {list, #{
@@ -126,9 +118,7 @@ parse(Actor, #{srv:=SrvId}) ->
             profile => {list, #{
                 type => binary,
                 start_time => date_3339,
-                startTime => {'__key', start_time, date_3339},
                 stop_time => date_3339,
-                stopTime => {'__key', stop_time, date_3339},
                 data => map,
                 meta => map,
                 '__mandatory' => [data]
@@ -146,7 +136,7 @@ parse(Actor, #{srv:=SrvId}) ->
             normalized_surname => binary
         }
     },
-    case nkactor_lib:parse_actor_data(Actor, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
         {ok, Actor2} ->
             Data = maps:get(data, Actor2, #{}),
             Spec = maps:get(spec, Data, #{}),

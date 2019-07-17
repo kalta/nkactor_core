@@ -47,6 +47,6 @@ config() ->
 
 %% @doc
 parse(_Actor, _Req) ->
-    {syntax, #{spec=>#{}}}.
+    {syntax, <<"v1a1">>, #{spec=>#{}}}.
 
 

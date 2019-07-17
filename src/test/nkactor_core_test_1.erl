@@ -60,6 +60,7 @@ all_tests() ->
     ok = api_test(),
     nkactor_core_test_util:create_test_data(),
     ok = list_test_1(),
+    timer:sleep(100),
     nkactor_core_test_util:create_test_data(),
     ok = list_test_2(),
     timer:sleep(100),
@@ -822,7 +823,7 @@ contact_test() ->
     "/utf8>>,
     Body2 = yaml(Body1),
 
-    {created, CT1} = kapi_req(#{verb=>create, body=>Body2, class=>nkactor_kapi}),
+    {created, CT1} = kapi_req(#{verb=>create, body=>Body2}),
     {ok, #{<<"metadata">>:=#{<<"uid">>:=UT1_UID}}} = kapi_req(#{resource=>"users", namespace=>"b.a.test.my_actors", name=>"ut1"}),
     #{
         <<"apiVersion">> := <<"core/v1a1">>,
@@ -934,7 +935,7 @@ contact_test() ->
     true = T2 > T1,
 
     {error, #{<<"message">>:= <<"Field 'apiVersion' is invalid">>}} = kapi_req(#{verb=>update, group=>core2, body=>Body2}),
-    {error, #{<<"message">>:= <<"Field 'kind' is invalid">>}} = kapi_req(#{verb=>update, resource=>users, body=>Body2}),
+    {error, #{<<"message">>:= <<"Field 'resource' is invalid">>}} = kapi_req(#{verb=>update, resource=>users, body=>Body2}),
     {error, #{<<"message">>:= <<"Field 'metadata.name' is invalid">>}} = kapi_req(#{verb=>update, name=>name2, body=>Body2}),
     {error, #{<<"message">>:= <<"Field 'metadata.namespace' is invalid">>}} = kapi_req(#{verb=>update, namespace=>"a-nktest", body=>Body2}),
     {ok, _} = kapi_req(#{verb=>update, namespace=>"c.b.a.test.my_actors", resource=>"contacts", name=>"ct1", body=>Body2}),

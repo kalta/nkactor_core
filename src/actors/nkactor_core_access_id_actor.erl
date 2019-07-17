@@ -37,7 +37,7 @@
 config() ->
     #{
         resource => ?RES_CORE_ACCESS_IDS,
-        versions => [0],
+        versions => [<<"v1a1">>],
         camel => <<"AccessId">>,
         verbs => [create, delete, deletecollection, get, list, patch, update, watch]
     }.
@@ -45,5 +45,5 @@ config() ->
 
 %% @doc
 parse(_Actor, _Req) ->
-    {syntax, #{data => map}}.
+    {syntax, <<"v1a1">>, #{data => map}}.
 

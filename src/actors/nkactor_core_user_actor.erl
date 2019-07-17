@@ -71,7 +71,7 @@ parse(_Actor, _Req) ->
         StoredPass = store_pass(Pass),
         {ok, StoredPass}
     end,
-    {syntax, #{spec=>#{password => Fun}}}.
+    {syntax, <<"v1a1">>, #{spec=>#{password => Fun}}}.
 
 
 %% @doc

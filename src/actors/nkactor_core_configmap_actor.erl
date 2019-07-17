@@ -37,7 +37,7 @@
 config() ->
     #{
         resource => ?RES_CORE_CONFIGMAPS,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch],
         camel => <<"ConfigMap">>
     }.
@@ -45,5 +45,5 @@ config() ->
 
 %% @doc
 parse(_Actor, _ApiReq) ->
-    {syntax, #{data => map}}.
+    {syntax, <<"v1a1">>, #{data => map}}.
 

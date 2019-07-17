@@ -52,7 +52,7 @@
 config() ->
     #{
         resource => ?RES_CORE_TASKS,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch],
         auto_activate => true,
         fields_filter => [
@@ -92,7 +92,7 @@ parse(Actor, _Req) ->
         '__mandatory' => [spec]
     },
     % Set expires_time based on max_secs
-    case nkactor_lib:parse_actor_data(Actor, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
         {ok, #{data:=#{spec:=Spec}, metadata := Meta} = Actor2} ->
             #{max_secs:=MaxSecs} = Spec,
             Now = nklib_date:epoch(msecs),
@@ -153,7 +153,7 @@ init(_Op, #actor_st{unload_policy={expires, _}, actor=Actor}=ActorSt) ->
             % Allow in-queue events to be processed
             % timer:sleep(100),
             ActorSt2 = set_status(Status2, ActorSt),
-            ?ACTOR_LOG(warning, "max tries reached for task", [], ActorSt2),
+            ?ACTOR_LOG(notice, "max tries reached for task", [], ActorSt2),
             {delete, task_max_tries_reached}
     end;
 
@@ -229,7 +229,7 @@ stop(actor_expired, ActorSt) ->
         error_msg => <<"task_max_time_reached">>
     },
     ActorSt2 = set_status(Status, ActorSt),
-    ?ACTOR_LOG(warning, "max time reached for task", [], ActorSt2),
+    ?ACTOR_LOG(notice, "max time reached for task", [], ActorSt2),
     {delete, ActorSt2};
 
 stop(_Reason, ActorSt) ->

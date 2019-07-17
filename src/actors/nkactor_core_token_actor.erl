@@ -40,7 +40,7 @@
 config() ->
     #{
         resource => ?RES_CORE_TOKENS,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch]
     }.
 
@@ -48,7 +48,7 @@ config() ->
 %% @doc
 parse(Actor, Req) ->
     Syntax = #{data => map},
-    case nkactor_lib:parse_actor_data(Actor, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
         {ok, #{metadata:=Meta2}=Actor2} ->
             case maps:is_key(expires_time, Meta2) of
                 true ->
@@ -81,7 +81,6 @@ request(get, <<"_execute">>, ActorId, Req) ->
 
 request(_Verb, _Path, _ActorId, _Req) ->
     continue.
-
 
 
 %% @doc

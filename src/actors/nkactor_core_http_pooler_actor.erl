@@ -59,7 +59,7 @@ parse(_Actor, _Req) ->
         },
         '__mandatory' => [spec]
     },
-    {syntax, Syntax}.
+    {syntax, <<"v1a1">>, Syntax}.
 
 
 
