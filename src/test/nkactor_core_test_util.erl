@@ -56,7 +56,7 @@ start() ->
             nkactor_store_pgsql,
             nkactor_core_store_pgsql,
             nkactor_kapi,
-            nkactor_core_kapi
+            nkactor_kapi_core
         ],
         pgsql_service => ?PGSQL_SRV,
         opentrace_filter => opentrace_filter(),
@@ -291,9 +291,9 @@ http_delete(Path) ->
 http_list(Path) ->
     Path2 = case lists:member($?, Path) of
         true ->
-            Path ++ "&getTotals=true";
+            Path ++ "&getTotal=true";
         false ->
-            Path ++ "?getTotals=true"
+            Path ++ "?getTotal=true"
     end,
     {200, List} =  http_get(Path2),
     #{<<"metadata">> := #{<<"total">>:=Total, <<"size">>:=Size}, <<"items">> := Items} = List,
@@ -302,7 +302,7 @@ http_list(Path) ->
 http_search(Namespace, Spec) ->
     Path = binary_to_list(list_to_binary([http_host(), "/search/v1a1/namespaces/" ++ Namespace])),
     Spec2 = Spec#{
-        get_totals => true,
+        get_total => true,
         get_data => true,
         get_metadata => true
     },

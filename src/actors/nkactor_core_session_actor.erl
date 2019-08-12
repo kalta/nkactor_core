@@ -39,7 +39,7 @@
 config() ->
     #{
         resource => ?RES_CORE_SESSIONS,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch]
     }.
 
@@ -55,12 +55,10 @@ parse(Actor, _ApiReq) ->
         '__mandatory' => [spec]
     },
     case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
-        {ok, #{data:=Data2, metadata:=Meta2}=Actor2} ->
+        {ok, #{data:=Data2}=Actor2} ->
             #{spec:=#{ttl_secs:=Secs}} = Data2,
-            Now = nklib_date:epoch(msecs),
-            {ok, Expires} = nklib_date:to_3339(Now+1000*Secs, msecs),
-            Meta3 = Meta2#{expires_time => Expires},
-            {ok, Actor2#{metadata:=Meta3}};
+            Actor3 = nkactor_lib:maybe_set_ttl(Actor2, 1000*Secs),
+            {ok, Actor3};
         {error, Error} ->
             {error, Error}
     end.
@@ -87,13 +85,10 @@ init(_Op, #actor_st{unload_policy = {expires, _}}=ActorSt) ->
 
 %% @doc
 sync_op(refresh, _From, ActorSt) ->
-    #actor_st{actor=#{data:=Data, metadata:=Meta}=Actor} = ActorSt,
+    #actor_st{actor=#{data:=Data}=Actor} = ActorSt,
     #{spec:=#{ttl_secs:=Secs}} = Data,
-    Now = nklib_date:epoch(msecs),
-    {ok, Expires} = nklib_date:to_3339(Now+1000*Secs, msecs),
-    Meta2 = Meta#{expires_time => Expires},
-    Actor2 = Actor#{metadata := Meta2},
-    {ok, ActorSt2} = nkactor_srv:do_update(Actor2, #{}, ActorSt),
+    Actor2 = nkactor_lib:set_ttl(Actor, 1000*Secs),
+    {ok, ActorSt2} = nkactor_srv_lib:update(Actor2, #{}, ActorSt),
     {reply, ok, ActorSt2};
 
 sync_op(_Op, _From, _ActorSt) ->

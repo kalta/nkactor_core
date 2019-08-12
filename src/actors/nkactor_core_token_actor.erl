@@ -56,10 +56,9 @@ parse(Actor, Req) ->
                 false ->
                     case Req of
                         #{params:=#{ttl:=TTL}} when is_integer(TTL), TTL>0 ->
-                            Now = nklib_date:epoch(msecs),
-                            {ok, Expires} = nklib_date:to_3339(Now+1000*TTL, msecs),
-                            Meta3 = Meta2#{expires_time => Expires},
-                            {ok, Actor2#{metadata := Meta3}};
+                            % If no expires_time, we use the TTL to generate one
+                            Actor3 = nkactor_lib:maybe_set_ttl(Actor2, 1000*TTL),
+                            {ok, Actor3};
                         _ ->
                             {error, ttl_missing}
                     end

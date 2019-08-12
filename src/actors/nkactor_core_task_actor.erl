@@ -93,12 +93,11 @@ parse(Actor, _Req) ->
     },
     % Set expires_time based on max_secs
     case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
-        {ok, #{data:=#{spec:=Spec}, metadata := Meta} = Actor2} ->
+        {ok, #{data:=#{spec:=Spec}}=Actor2} ->
             #{max_secs:=MaxSecs} = Spec,
-            Now = nklib_date:epoch(msecs),
-            {ok, Expires} = nklib_date:to_3339(Now + 1000 * MaxSecs, msecs),
-            Meta2 = Meta#{expires_time => Expires},
-            {ok, Actor2#{metadata := Meta2}};
+            % If no expires yet, we set it
+            Actor3 = nkactor_lib:maybe_set_ttl(Actor2, 1000*MaxSecs),
+            {ok, Actor3};
         {error, Error} ->
             {error, Error}
     end.
@@ -207,7 +206,7 @@ event(_Event, _ActorSt) ->
 %% @doc
 sync_op({update_state, Body}, _From, ActorSt) ->
     {Reply, ActorSt2} = do_update_state(Body, ActorSt),
-    {reply, Reply, ActorSt2};
+    {reply_and_save, Reply, ActorSt2};
 
 sync_op(_Op, _From, _ActorSt) ->
     continue.
@@ -215,8 +214,8 @@ sync_op(_Op, _From, _ActorSt) ->
 
 %% @doc
 async_op({update_state, Body}, ActorSt) ->
-    {ok, ActorSt2} = do_update_state(Body, ActorSt),
-    {noreply, ActorSt2};
+    {_Reply, ActorSt2} = do_update_state(Body, ActorSt),
+    {noreply_and_save, ActorSt2};
 
 async_op(_Op, _ActorSt) ->
     continue.
@@ -265,22 +264,27 @@ set_status(Status, #actor_st{actor=#{data:=Data}=Actor}=ActorSt) ->
     NewStatus1 = maps:merge(OldStatus, Status),
     Now = nklib_date:now_3339(secs),
     NewStatus2 = NewStatus1#{last_status_time => Now},
-    case maps:get(task_status, NewStatus2) of
+    % On expired, it may have no status
+    IsActive = case maps:get(task_status, NewStatus2, start) of
         success ->
             % Allow events
-            nkactor_srv:delayed_async_op(self(), delete, 100);
+            nkactor_srv:delayed_async_op(self(), delete, 100),
+            false;
         error ->
-            nkactor_srv:delayed_async_op(self(), {stop, task_status_error}, 100);
+            nkactor_srv:delayed_async_op(self(), {stop, task_status_error}, 100),
+            false;
         failure ->
-            nkactor_srv:delayed_async_op(self(), delete, 100);
+            nkactor_srv:delayed_async_op(self(), delete, 100),
+            false;
         _ ->
-            ok
+            true
     end,
     ActorSt2 = ActorSt#actor_st{actor=Actor#{data:=Data#{status => NewStatus2}}},
+    ActorSt3 = nkactor_srv_lib:set_active(IsActive, ActorSt2),
     Event = {updated_state, NewStatus2},
     % Sleep so that it won't go to the same msec
     timer:sleep(2),
-    nkactor_srv:do_event(Event, ActorSt2).
+    nkactor_srv_lib:event(Event, ActorSt3).
 
 
 

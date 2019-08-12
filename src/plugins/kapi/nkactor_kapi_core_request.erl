@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Default callbacks for plugin definitions
--module(nkactor_core_kapi_request).
+-module(nkactor_kapi_core_request).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -export([api_actor_to_actor/3]).
 
@@ -107,7 +107,7 @@ api_actor_to_actor_syntax() ->
 			<<"creationTime">> => {'__key', creation_time},
 			<<"updateTime">> => {'__key', update_time},
 			<<"isActive">> => {'__key', is_active},
-			<<"expiresTime">>=> {'__key', expires_time },
+			<<"expiresTime">>=> {'__key', expires_time},
 			<<"labels">> => {'__key', labels},
 			<<"fts">> => {'__key', fts},
 			<<"links">> => {'__key', links},

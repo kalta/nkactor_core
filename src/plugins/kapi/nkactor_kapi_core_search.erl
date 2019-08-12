@@ -18,35 +18,16 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc NkActor Node Actor
--module(nkactor_core_node_actor).
+%% @doc Default callbacks for plugin definitions
+-module(nkactor_kapi_core_search).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
-
--behavior(nkactor_actor).
-
--export([config/0, parse/2]).
-
-
--include("nkactor_core.hrl").
-
-
+-export([search/2]).
 
 
 %% ===================================================================
-%% Behaviour callbacks
+%%
 %% ===================================================================
 
-%% @doc
-config() ->
-    #{
-        resource => ?RES_CORE_NODES,
-        versions => [<<"0">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch]
-    }.
 
-
-%% @doc
-parse(_Actor, _Req) ->
-    {syntax, <<"v1a1">>, #{spec=>#{}}}.
-
-
+search(_SrvId, _ApiReq) ->
+	ok.

@@ -165,7 +165,12 @@ add_user_link(_SrvId, Actor) ->
     Actor2 = nkactor_lib:rm_links(?GROUP_CORE, ?RES_CORE_USERS, Actor),
     case Actor2 of
         #{data:=#{spec:=#{user:=UserId}}} ->
-            nkactor_lib:add_link(UserId, ?GROUP_CORE, ?RES_CORE_USERS, Actor);
+            case nkactor_lib:add_checked_link(UserId, ?GROUP_CORE, ?RES_CORE_USERS, Actor) of
+                {ok, _, Actor2} ->
+                    {ok, Actor2};
+                {error, Error} ->
+                    {error, Error}
+            end;
         _ ->
             {ok, Actor2}
     end.

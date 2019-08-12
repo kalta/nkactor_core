@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Default callbacks for plugin definitions
--module(nkactor_core_kapi_plugin).
+-module(nkactor_kapi_core_plugin).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -export([plugin_deps/0]).
 

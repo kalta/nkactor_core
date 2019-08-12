@@ -19,19 +19,18 @@
 %% -------------------------------------------------------------------
 
 %% @doc NkActor File Actor
--module('nkactor_core_file_actor.erl').
+-module(nkactor_core_file_actor).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -behavior(nkactor_actor).
 
 -export([op_get_body/1, op_get_download_link/2, op_get_media/1]).
--export([config/0, parse/3, request/3, sync_op/3]).
+-export([config/0, parse/2, request/4, sync_op/3]).
 
 
--include("nkactor.hrl").
+-include_lib("nkactor/include/nkactor.hrl").
+-include_lib("nkactor/include/nkactor_debug.hrl").
 -include("nkactor_core.hrl").
--include("nkactor_debug.hrl").
-
 
 
 %% ===================================================================
@@ -40,18 +39,18 @@
 
 %% @doc
 op_get_body(Id) ->
-    nkactor_srv:sync_op(Id, nkactor_core_get_body, 60000).
+    nkactor_srv:sync_op(Id, nkactor_get_body, 60000).
 
 
 %% @doc
 op_get_download_link(Id, ExtUrl) ->
-    nkactor_srv:sync_op(Id, {nkactor_core_get_download_link, ExtUrl}).
+    nkactor_srv:sync_op(Id, {nkactor_get_download_link, ExtUrl}).
 
 
 op_get_media(Id) ->
     case nkactor:activate(Id) of
         {ok, #actor_id{group=?GROUP_CORE, resource=?RES_CORE_FILES}=ActorId, _} ->
-            nkactor_srv:sync_op(ActorId, nkactor_core_get_media);
+            nkactor_srv:sync_op(ActorId, nkactor_get_media);
         {ok, _} ->
             {error, actor_not_found};
         {error, Error} ->
@@ -76,15 +75,15 @@ config() ->
     #{
         resource => ?RES_CORE_FILES,
         group => ?GROUP_CORE,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch, upload],
-        filter_fields => [
+        fields_filter => [
             'spec.name',
             'spec.size',
             'spec.content_type',
             'spec.external_id'
         ],
-        sort_fields => [
+        fields_sort => [
             'spec.name',
             'spec.size',
             'spec.content_type'
@@ -93,7 +92,7 @@ config() ->
             'spec.size' => integer
         },
         short_names => [],
-        immutable_fields => [
+        fields_static => [
             'spec.content_type',
             'spec.provider',
             'spec.external_id',
@@ -105,7 +104,7 @@ config() ->
 
 
 %% @doc
-parse(SrvId, Actor, #{verb:=create}=Req) ->
+parse(Actor, #{verb:=create}=Req) ->
     Syntax = #{
         spec => #{
             content_type => binary,
@@ -117,18 +116,18 @@ parse(SrvId, Actor, #{verb:=create}=Req) ->
         },
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor(Actor, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
         {ok, Actor2} ->
             #{data:=#{spec:=Spec2}}=Actor2,
             Params = maps:get(params, Req, #{}),
-            do_parse(SrvId, Params, Spec2, Actor);
+            do_parse(Spec2, Params, Actor2, Req);
         {error, Error} ->
             {error, Error}
     end;
 
 %% We allow fields in case they didn't change
-%% immutable_fields makes sure no one is changed
-parse(_SrvId, Actor, #{verb:=update}) ->
+%% fields_static makes sure no one is changed
+parse(_Actor, #{verb:=update}) ->
     Syntax = #{
         spec => #{
             content_type => binary,
@@ -140,50 +139,38 @@ parse(_SrvId, Actor, #{verb:=update}) ->
         },
         '__mandatory' => [spec]
     },
-    nkactor_lib:parse_actor(Actor, Syntax).
+    {syntax, <<"v1a1">>, Syntax}.
 
 
 %% @doc
-request(SrvId, ActorId, #{verb:=get, subresource:=[]}=ApiReq) ->
-    #{params:=Params, vsn:=Vsn} = ApiReq,
-    case nkservice_actor:get_actor({SrvId, ActorId}) of
-        {ok, #actor{data=Data}=Actor} ->
-            case nklib_syntax:parse(Params, #{getBodyInline=>boolean}) of
-                {ok, #{getBodyInline:=true}, _} ->
-                    case op_get_body(SrvId, ActorId) of
+request(get, <<>>, ActorId, #{params:=Params}) ->
+    case nkactor:get_actor(ActorId) of
+        {ok, #{data:=Data}=Actor} ->
+            case nklib_syntax:parse(Params, #{get_body_inline=>boolean}) of
+                {ok, #{get_body_inline:=true}, _} ->
+                    case op_get_body(ActorId) of
                         {ok, _CT, Body} ->
                             #{spec:=Spec} = Data,
                             Body2 = base64:encode(Body),
                             Spec2 = Spec#{body_base64 => Body2},
-                            Actor2 = Actor#actor{data=Data#{spec:=Spec2}},
-                            case nkactor_core_api:actor_to_external(SrvId, Actor2, Vsn) of
-                                {ok, ApiActor} ->
-                                    {ok, ApiActor};
-                                {error, ApiActorError} ->
-                                    {error, ApiActorError}
-                            end;
+                            {ok, Actor#{data:=Data#{spec:=Spec2}}};
                         {error, Error} ->
                             {error, Error}
                     end;
                 _ ->
-                    case nkactor_core_api:actor_to_external(SrvId, Actor, Vsn) of
-                        {ok, ApiActor} ->
-                            {ok, ApiActor};
-                        {error, ApiActorError} ->
-                            {error, ApiActorError}
-                    end
+                    {ok, Actor}
             end;
         {error, Error} ->
             {error, Error}
     end;
 
-request(SrvId, _ActorId, #{verb:=upload, subresource:=[], params:=Params}=ApiReq) ->
-    case Params of
-        #{provider:=Provider} ->
-            case ApiReq of
+request(upload, <<>>, _ActorId, #{params:=Params}=Req) ->
+    case nklib_syntax:parse(Params, #{provider=>binary}) of
+        {ok, #{provider:=Provider}, _} ->
+            case Req of
                 #{
                     body := Body,
-                    meta := #{nkactor_core_http_content_type:=CT}
+                    meta := #{nkactor_http_content_type:=CT}
                 } ->
                     Body2 = #{
                         spec => #{
@@ -192,51 +179,51 @@ request(SrvId, _ActorId, #{verb:=upload, subresource:=[], params:=Params}=ApiReq
                             provider => Provider
                         }
                     },
-                    ApiReq2 = ApiReq#{
+                    Req2 = Req#{
                         verb := create,
                         body := Body2,
-                        subresource := []
+                        subresource := <<>>
                     },
-                    nkactor_core_api_core:request(SrvId, ApiReq2);
+                    nkactor_request:request(Req2);
                 _ ->
                     {error, request_body_invalid}
             end;
         _ ->
-            {error, {field_missing, provider}}
+            {error, {field_missing, <<"provider">>}}
     end;
 
-request(SrvId, ActorId, #{verb:=get, subresource:=[<<"_download">>]}) ->
-    case op_get_body(SrvId, ActorId) of
+request(get, <<"_download">>, ActorId, _Req) ->
+    case op_get_body(ActorId) of
         {ok, CT, Body} ->
             {raw, {CT, Body}};
         {error, Error} ->
             {error, Error}
     end;
 
-request(SrvId, ActorId, #{verb:=get, subresource:=[<<"_rpc">>, <<"downloadLink">>]}=Req) ->
+request(get, <<"_rpc/download_link">>, ActorId, Req) ->
     ExtUrl = maps:get(external_url, Req, <<>>),
-    case op_get_download_link(SrvId, ActorId, ExtUrl) of
+    case op_get_download_link(ActorId, ExtUrl) of
         {ok, Url, 0} ->
             {ok, #{url=>Url}};
         {ok, Url, TTL} ->
-            {ok, #{url=>Url, ttlSecs=>TTL}};
+            {ok, #{url=>Url, ttl_secs=>TTL}};
         {error, Error} ->
             {error, Error}
     end;
 
-request(_SrvId, _ActorId, _Api) ->
+request(_Verb, _Path, _ActorId, _Req) ->
     continue.
 
 
 %% @doc
-sync_op(nkactor_core_get_body, _From, ActorSt) ->
-    #actor_st{srv=SrvId, actor=#actor{data=Data}=Actor} = ActorSt,
-    LinkType = nkactor_core_actor_util:link_type(?GROUP_CORE, ?LINK_CORE_FILE_PROVIDER),
-    [ProviderUID] = nkservice_actor_util:get_linked_uids(LinkType, Actor),
-    #{spec:=#{<<"contentType">>:=CT, external_id:=Id}=Spec} = Data,
+sync_op(nkactor_get_body, _From, ActorSt) ->
+    #actor_st{srv=SrvId, actor=#{data:=Data}=Actor} = ActorSt,
+    LinkType = nkactor_lib:link_type(?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS),
+    [ProviderUID] = nkactor_lib:get_linked_uids(LinkType, Actor),
+    #{spec:=#{content_type:=CT, external_id:=Id}=Spec} = Data,
     FileMeta1 = #{
         name => Id,
-        content_type => ct1
+        content_type => CT
     },
     FileMeta2 = case Spec of
         #{password:=Pass} ->
@@ -250,50 +237,46 @@ sync_op(nkactor_core_get_body, _From, ActorSt) ->
         _ ->
             FileMeta2
     end,
-    Reply = case nkactor_core_file_provider_actor:op_get_spec(SrvId, ProviderUID) of
+    Reply = case nkactor_core_file_provider_actor:op_get_spec(ProviderUID) of
         {ok, _ProvActorId, ProviderSpec} ->
-            case nkfile:download(SrvId, ?DOMAIN_PKG_ID_FILE, ProviderSpec, FileMeta3) of
+            case nkfile:download(SrvId, ProviderSpec, FileMeta3) of
                 {ok, Bin, _DownMeta} ->
                     {ok, CT, Bin};
                 {error, file_not_found} ->
-                    {error, file_read_error};
+                    {error, {file_read_error, Id}};
                 {error, Error} ->
                     {error, Error}
             end;
         {error, Error} ->
-            ?ACTOR_LOG(warning, "FILEprovider error: ~p", [Error]),
-            {error,provider_error}
+            ?ACTOR_LOG(warning, "file provider error: ~p", [Error]),
+            {error, Error}
     end,
     {reply, Reply, ActorSt};
 
-sync_op({nkactor_core_get_download_link, ExtUrl}, _From, ActorSt) ->
-    #actor_st{srv=SrvId, actor=#actor{id=ActorId, data=Data}=Actor} = ActorSt,
+sync_op({nkactor_get_download_link, _ExtUrl}, _From, ActorSt) ->
+    #actor_st{actor_id=_ActorId, actor=#{data:=Data}=Actor} = ActorSt,
     #{spec:=#{external_id:=Id}} = Data,
-    LinkType = nkactor_core_actor_util:link_type(?GROUP_CORE, ?LINK_CORE_FILE_PROVIDER),
-    [ProvUID] = nkservice_actor_util:get_linked_uids(LinkType, Actor),
-    Reply = case nkactor_core_file_provider_actor:op_get_direct_download_link(SrvId, ProvUID, Id) of
+    LinkType = nkactor_lib:link_type(?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS),
+    [ProvUID] = nkactor_lib:get_linked_uids(LinkType, Actor),
+    Reply = case nkactor_core_file_provider_actor:op_get_direct_download_link(ProvUID, Id) of
         {ok, Link, TTL} ->
             {ok, Link, TTL};
-        {error, storage_class_incompatible} ->
-            case nkactor_core_actor_util:get_public_self(ActorId, ?GROUP_CORE_V1A1, ExtUrl) of
-                undefined ->
-                    {error, no_public_address};
-                Url ->
-                    {ok, <<Url/binary, "/_download">>, 0}
-            end;
+        {error, {storage_class_incompatible, _}} ->
+            %{ok, <<Url/binary, "/_download">>, 0}
+            {error, no_public_address};
         {error, Error} ->
             {error, Error}
     end,
     {reply, Reply, ActorSt};
 
-sync_op(nkactor_core_get_media, _From, #actor_st{actor=Actor}=ActorSt) ->
-    #actor{id=#actor_id{uid=UID, name=Name}=ActorId, data=Data} = Actor,
-    #{spec:=#{<<"contentType">>:=CT, size:=Size}} = Data,
+sync_op(nkactor_get_media, _From, ActorSt) ->
+    #actor_st{actor_id=#actor_id{uid=UID, name=Name}=ActorId, actor=Actor} = ActorSt,
+    #{data:=#{spec:=#{content_type:=CT, size:=Size}}} = Actor,
     Media = #{
-        <<"fileId">> => UID,
+        file_id => UID,
         content_type => CT,
         size => Size,
-        <<"name">> => Name
+        name => Name
     },
     {reply, {ok, ActorId, Media}, ActorSt};
 
@@ -308,48 +291,46 @@ sync_op(_Op, _From, _ActorSt) ->
 
 
 %% @private
-do_parse(SrvId, #{provider:=Provider}, Spec, Actor) ->
-    do_parse(SrvId, #{}, Spec#{provider=>Provider}, Actor);
+do_parse(Spec, #{provider:=Provider}, Actor, Req) ->
+    do_parse(Spec#{provider=>Provider}, #{}, Actor, Req);
 
-do_parse(SrvId, _Params, #{provider:=ProviderId}=Spec, Actor) ->
-    ProviderId2 = nkactor_lib:process_id(SrvId, ProviderId),
-    case nkactor_core_file_provider_actor:op_get_spec(SrvId, ProviderId2) of
-        {ok, ProvActorId, ProvSpec} ->
-            case ProvActorId of
-                #actor_id{group=?GROUP_CORE, resource=?RES_CORE_FILE_PROVIDERS} ->
-                    LinkType = nkactor_lib:link_type(?GROUP_CORE, ?LINK_CORE_FILE_PROVIDER),
-                    Actor2 = nkactor_lib:add_link(ProvActorId, Actor, LinkType),
-                    do_parse_upload(SrvId, Spec, ProvActorId, ProvSpec, Actor2);
-                _ ->
+do_parse(#{provider:=ProviderId}=Spec, _Params, Actor, Req) ->
+    case nkactor_lib:add_checked_link(ProviderId, ?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS, Actor) of
+        {ok, ProvActorId, Actor2} ->
+            case nkactor_core_file_provider_actor:op_get_spec(ProviderId) of
+                {ok, _, ProvSpec} ->
+                    do_parse_upload(Spec, ProvActorId, ProvSpec, Actor2, Req);
+                {error, _} ->
                     {error, {provider_unknown, ProviderId}}
             end;
         {error, _} ->
             {error, {provider_unknown, ProviderId}}
     end;
 
-do_parse(_SrvId, _Params, _Spec, _Actor) ->
-    {error, {field_missing, 'spec.provider'}}.
+do_parse(_Spec, _Params, _Actor, _Req) ->
+    {error, {field_missing, <<"data.spec.provider">>}}.
 
 
 %% @private
-do_parse_upload(SrvId, #{body_base64:=Bin}=Spec, ProvActorId, ProvSpec, Actor) ->
+do_parse_upload(#{body_base64:=Bin}=Spec, ProvActorId, ProvSpec, Actor, Req) ->
     Spec2 = maps:remove(body_base64, Spec),
-    do_parse_upload(SrvId, Spec2#{body_binary=>Bin}, ProvActorId, ProvSpec, Actor);
+    do_parse_upload(Spec2#{body_binary=>Bin}, ProvActorId, ProvSpec, Actor, Req);
 
-do_parse_upload(SrvId, #{url:=Url}=Spec, ProvActorId, ProvSpec, Actor) ->
-    case nkfile_util:get_url(ProvActorId, ProvSpec, Url) of
+do_parse_upload(#{url:=Url}=Spec, ProvActorId, ProvSpec, Actor, Req) ->
+    case get_url(ProvActorId, ProvSpec, Url) of
         {ok, CT, Body} ->
             Spec2 = maps:remove(url, Spec),
             Spec3 = Spec2#{body_binary=>Body, content_type=>CT},
-            do_parse_upload(SrvId, Spec3, ProvActorId, ProvSpec, Actor);
+            do_parse_upload(Spec3, ProvActorId, ProvSpec, Actor, Req);
         {error, Error} ->
             {error, Error}
     end;
 
-do_parse_upload(SrvId, #{body_binary:=Bin, content_type:=CT}=Spec, _ProvActorId, ProvSpec, Actor) ->
-    #actor{id=#actor_id{uid=UID}, data=Data} = Actor,
-    FileMeta1 = #{name => UID, contentType => CT},
-    case nkfile:upload(SrvId, ?DOMAIN_PKG_ID_FILE, ProvSpec, FileMeta1, Bin) of
+do_parse_upload(#{body_binary:=Bin, content_type:=CT}=Spec, _ProvActorId, ProvSpec, Actor, Req) ->
+    #{uid:=UID, data:=Data} = Actor,
+    FileMeta1 = #{name => UID, content_type => CT},
+    #{srv:=SrvId} = Req,
+    case nkfile:upload(SrvId, ProvSpec, FileMeta1, Bin) of
         {ok, FileMeta2, _UpMeta} ->
             #{size:=Size} = FileMeta2,
             Spec1 = maps:remove(body_binary, Spec),
@@ -370,34 +351,77 @@ do_parse_upload(SrvId, #{body_binary:=Bin, content_type:=CT}=Spec, _ProvActorId,
                     Spec3
             end,
             Data2 = Data#{spec:=Spec4},
-            {ok, Actor#actor{data=Data2}};
+            {ok, Actor#{data:=Data2}};
         {error, Error} ->
             {error, Error}
     end;
 
-do_parse_upload(_SrvId, #{body_binary:=_}, _ProvActorId, _ProvSpec, _Actor) ->
-    {error, {field_missing, 'spec.content_type'}};
+do_parse_upload(#{body_binary:=_}, _ProvActorId, _ProvSpec, _Actor, _Req) ->
+    {error, {field_missing, <<"spec.content_type">>}};
 
-do_parse_upload(SrvId, #{external_id:=Id, content_type:=CT}=Spec, ProvActorId, _ProvSpec, Actor) ->
-    case nkactor_core_file_provider_actor:op_get_check_meta(SrvId, ProvActorId, Id) of
-        {ok, #{contentType:=CT,size:=Size}} ->
-            #actor{data=Data} = Actor,
+do_parse_upload(#{external_id:=Id, content_type:=CT}=Spec, _ProvActorId, ProvSpec, Actor, Req) ->
+    #{srv:=SrvId} = Req,
+    case nkfile:get_file_meta(SrvId, ProvSpec, Id) of
+        {ok, #{content_type:=CT, size:=Size}} ->
+            #{data:=Data} = Actor,
             Data2 = Data#{spec => Spec#{size => Size}},
-            {ok, Actor#actor{data=Data2}};
+            {ok, Actor#{data:=Data2}};
         {ok, _} ->
             {error, content_type_invalid};
+        {error, {file_too_large, Id}} ->
+            case nkfile:delete(SrvId, ProvSpec, #{name=>Id}) of
+                ok ->
+                    ?ACTOR_LOG(notice, "deleted file too large: ~p", [Id]);
+                {error, Error} ->
+                    ?ACTOR_LOG(warning, "could not delete file too large ~p: ~p", [Id, Error])
+            end,
+            {error, {file_too_large, Id}};
         {error, Error} ->
             {error, Error}
     end;
 
-do_parse_upload(_SrvId, #{external_id:=_}, _ProvActorId, _ProvSpec, _Actor) ->
-    {error, {field_missing, 'spec.content_type'}};
+do_parse_upload(#{external_id:=_}, _ProvActorId, _ProvSpec, _Actor, _Req) ->
+    {error, {field_missing, <<"spec.content_type">>}};
 
-do_parse_upload(_SrvId, _Spec, _ProvActorId, _ProvSpec, _Actor) ->
-    {error, {field_missing, body_base64}}.
+do_parse_upload(_Spec, _ProvActorId, _ProvSpec, _Actor, _Req) ->
+    {error, {field_missing, <<"spec.body_base64">>}}.
 
 
 
+
+%% @doc
+-spec get_url(#actor_id{}, nkfile:provider_spec(), binary()) ->
+    {ok, CT::binary(), Body::binary()} | {error, term()}.
+
+get_url(ProvActorId, ProviderSpec, Url) ->
+    #actor_id{namespace=Namespace} = ProvActorId,
+    MaxSize = maps:get(max_size, ProviderSpec, 0),
+    Opts = [
+        follow_redirect,
+        {pool, Namespace}
+    ],
+    case catch hackney:request(get, Url, [], <<>>, Opts) of
+        {ok, 200, Hds, Ref} ->
+            case hackney_headers:parse(<<"content-length">>, Hds) of
+                Size when is_integer(Size) andalso (MaxSize==0 orelse Size =< MaxSize) ->
+                    case hackney_headers:parse(<<"content-type">>, Hds) of
+                        {T1, T2, _} ->
+                            case hackney:body(Ref) of
+                                {ok, Body} ->
+                                    CT = <<T1/binary, $/, T2/binary>>,
+                                    {ok, CT, Body};
+                                {error, Error} ->
+                                    {error, {hackney_error, Error}}
+                            end;
+                        _ ->
+                            {error, {file_read_error, Url}}
+                    end;
+                _ ->
+                    {error, {file_too_large, Url}}
+            end;
+        _ ->
+            {error, {file_read_error, Url}}
+    end.
 
 %%%% @private
 %%to_bin(Term) when is_binary(Term) -> Term;

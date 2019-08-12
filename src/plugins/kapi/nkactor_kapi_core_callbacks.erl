@@ -19,7 +19,7 @@
 %% -------------------------------------------------------------------
 
 %% @doc Default plugin callbacks
--module(nkactor_core_kapi_callbacks).
+-module(nkactor_kapi_core_callbacks).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([api_get_groups/2]).
@@ -59,7 +59,35 @@ actor_kapi_fields_trans(Map) ->
         'taskStatus' => 'task_status',
         'lastTryStartTIme' => 'last_try_start_time',
         'lastStatusTime' => 'last_status_time',
-        'errorMsg' => 'error_msg'
+        'errorMsg' => 'error_msg',
+        % Sessions
+        'data.spec.ttlSecs' => 'data.spec.ttl_secs',
+        % File providers
+        'data.spec.storageClass' => 'data.spec.storage_class',
+        'data.spec.maxSize' => 'data.spec.max_size',
+        'data.spec.encryptionAlgo' => 'data.spec.encryption_algo',
+        'data.spec.hashAlgo' => 'data.spec.hash_algo',
+        'data.spec.directDownload' => 'data.spec.direct_download',
+        'data.spec.directUpload' => 'data.spec.direct_upload',
+        'data.spec.directDownloadSecs' => 'data.spec.direct_download_secs',
+        'data.spec.directUploadSecs' => 'data.spec.direct_upload_secs',
+        'data.spec.filesystemConfig' => 'data.spec.filesystem_config',
+        'data.spec.filesystemConfig.filePath' => 'data.spec.filesystem_config.file_path',
+        'data.spec.s3Config' => 'data.spec.s3_config',
+        'data.spec.s3Config.region' => 'data.spec.s3_config.region',
+        'data.spec.s3Config.key' => 'data.spec.s3_config.key',
+        'data.spec.s3Config.secret' => 'data.spec.s3_config.secret',
+        'data.spec.s3Config.bucket' => 'data.spec.s3_config.bucket',
+        'data.spec.s3Config.path' => 'data.spec.s3_config.path',
+        'data.spec.s3Config.url' => 'data.spec.s3_config.url',
+        'data.spec.s3Config.scheme' => 'data.spec.s3_config.scheme',
+        'data.spec.s3Config.host' => 'data.spec.s3_config.host',
+        'data.spec.s3Config.port' => 'data.spec.s3_config.port',
+        % Files
+        'data.spec.contentType' => 'data.spec.content_type',
+        'data.spec.bodyBase64' => 'data.spec.body_base64',
+        'data.spec.bodyBinary' => 'data.spec.body_binary',
+        'data.spec.externalId' => 'data.spec.external_id'
     },
     {continue, [Map2]}.
 
@@ -75,7 +103,18 @@ actor_kapi_pre_request(update, ?GROUP_CORE, ?RES_CORE_TASKS, <<"_state">>, #{bod
         errorMsg => {'__key', error_msg}
     },
     {ok, Parsed} = nklib_syntax:parse_all(Actor, Syntax),
-    {continue, [?GROUP_CORE, ?RES_CORE_TASKS, <<"_state">>, Req#{body:=Parsed}]};
+    {continue, [update, ?GROUP_CORE, ?RES_CORE_TASKS, <<"_state">>, Req#{body:=Parsed}]};
+
+actor_kapi_pre_request(get, ?GROUP_CORE, ?RES_CORE_FILES, <<>>, #{params:=Params}=Req) ->
+    Syntax = #{
+        getBodyInline => {'__key', get_body_inline, boolean}
+    },
+    {ok, Params2} = nklib_syntax:parse_all(Params, Syntax),
+    {continue, [update, ?GROUP_CORE, ?RES_CORE_FILES, <<>>, Req#{params:=Params2}]};
+
+actor_kapi_pre_request(get, ?GROUP_CORE, ?RES_CORE_FILES, <<"_rpc/downloadLink">>, Req) ->
+    Req2 = Req#{subresource:=<<"_rpc/download_link">>},
+    {continue, [update, ?GROUP_CORE, ?RES_CORE_FILES, <<"_rpc/downloadLink">>, Req2]};
 
 actor_kapi_pre_request(_Verb, _Group, _Res, _SubRes, _Req) ->
     continue.
@@ -107,6 +146,47 @@ actor_kapi_parse(?GROUP_CORE, ?RES_CORE_TASKS) ->
                 lastTryStartTime => {'__key', last_try_start_time},
                 lastStatusTime => {'__key', last_status_time},
                 errorMsg => {'__key', error_msg}
+            }
+        }
+    };
+
+actor_kapi_parse(?GROUP_CORE, ?RES_CORE_SESSIONS) ->
+    #{
+        data => #{
+            spec => #{
+                ttlSecs => {'__key', ttl_secs}
+            }
+        }
+    };
+
+actor_kapi_parse(?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS) ->
+    #{
+        data => #{
+            spec => #{
+                storageClass => {'__key', storage_class},
+                maxSize => {'__key', max_size},
+                encryptionAlgo => {'__key', encryption_algo},
+                hashAlgo=> {'__key', hash_algo},
+                directDownload=> {'__key', direct_download},
+                directUpload=> {'__key', direct_upload},
+                directDownloadSecs=> {'__key', direct_download_secs},
+                directUploadSecs=> {'__key', direct_upload_secs},
+                filesystemConfig=> {'__key', filesystem_config, #{
+                    filePath => {'__key', file_path}
+                }},
+                s3Config => {'__key', s3_config}
+            }
+        }
+    };
+
+actor_kapi_parse(?GROUP_CORE, ?RES_CORE_FILES) ->
+    #{
+        data => #{
+            spec => #{
+                contentType => {'__key', content_type},
+                bodyBase64 => {'__key', body_base64},
+                bodyBinary => {'__key', body_binary},
+                externalId=> {'__key', external_id}
             }
         }
     };
@@ -210,6 +290,62 @@ actor_kapi_unparse(?GROUP_CORE, ?RES_CORE_TASKS) ->
         }
     };
 
+actor_kapi_unparse(?GROUP_CORE, ?RES_CORE_SESSIONS) ->
+    #{
+        data => #{
+            spec => {'__key', <<"spec">>, #{
+                ttl_secs => {'__key', <<"ttlSecs">>}
+            }},
+            data => {'__key', <<"data">>}
+        }
+    };
+
+actor_kapi_unparse(?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS) ->
+    #{
+        data => #{
+            spec => #{
+                storage_class => {'__key', <<"storageClass">>, binary},
+                max_size => {'__key', <<"maxSize">>},
+                encryption_algo => {'__key', <<"encryptionAlgo">>, binary},
+                hash_algo=> {'__key', <<"hashAlgo">>, binary},
+                direct_download=> {'__key', <<"directDownload">>},
+                direct_upload=> {'__key', <<"directUpload">>},
+                direct_download_secs => {'__key', <<"directDownloadSecs">>},
+                direct_upload_secs=> {'__key', <<"directUploadSecs">>},
+                filesystem_config=> {'__key', <<"filesystemConfig">>, #{
+                    file_path => {'__key', <<"filePath">>}
+                }},
+                s3_config => {'__key', <<"s3Config">>, #{
+                    region => {'__key', <<"region">>},
+                    key => {'__key', <<"key">>},
+                    secret => {'__key', <<"secret">>},
+                    bucket => {'__key', <<"bucket">>},
+                    path => {'__key', <<"path">>},
+                    url => {'__key', <<"url">>},
+                    scheme => {'__key', <<"scheme">>},
+                    host => {'__key', <<"host">>},
+                    port => {'__key', <<"port">>}
+                }}
+            }
+        }
+    };
+
+actor_kapi_unparse(?GROUP_CORE, ?RES_CORE_FILES) ->
+    #{
+        data => #{
+            spec => #{
+                content_type => {'__key', <<"contentType">>},
+                provider => {'__key', <<"provider">>},
+                body_base64 => {'__key', <<"bodyBase64">>},
+                body_binary => {'__key', <<"bodyBinary">>},
+                external_id => {'__key', <<"externalId">>},
+                url => {'__key', <<"url">>},
+                hash => {'__key', <<"hash">>},
+                password => {'__key', <<"password">>},
+                size => {'__key', <<"size">>}
+            }
+        }
+    };
 actor_kapi_unparse(_Group, _Res) ->
     continue.
 

@@ -32,7 +32,11 @@
 
 %% @doc 
 plugin_deps() ->
-	[nkactor].
+	[
+		nkactor,
+		nkfile_filesystem,
+		nkfile_s3
+	].
 
 
 %% @doc
@@ -40,14 +44,14 @@ plugin_config(_SrvId, Config, _Service) ->
 	Modules = [
 		nkactor_core_configmap_actor,
 		nkactor_core_contact_actor,
-		nkactor_core_http_pooler_actor,
 		nkactor_core_event_actor,
 		nkactor_core_access_id_actor,
-		nkactor_core_node_actor,
 		nkactor_core_session_actor,
 		nkactor_core_task_actor,
 		nkactor_core_token_actor,
-		nkactor_core_user_actor
+		nkactor_core_user_actor,
+		nkactor_core_file_provider_actor,
+		nkactor_core_file_actor
 	],
 	nkactor_plugin:add_modules(Config, ?GROUP_CORE, Modules).
 

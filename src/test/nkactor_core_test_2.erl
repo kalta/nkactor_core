@@ -32,6 +32,8 @@
 
 -include_lib("nkactor/include/nkactor.hrl").
 
+-define(ACTOR_SRV, test_actors).
+
 
 %% ===================================================================
 %% Public
@@ -43,9 +45,9 @@ all_tests() ->
     ok = alarm_test(),
     ok = token_test(),
     ok = config_test(),
-%%    ok = task_test(),
-%%    ok = auto_activate_test(),
-%%    ok = session_test(),
+    ok = task_test(),
+    ok = session_test(),
+    ok = auto_activate_test(),
 %%    ok = file_provider_test(),
 %%    ok = file_test(),
 %%    nkactor_core_test_util:delete_test_data(),
@@ -54,7 +56,7 @@ all_tests() ->
 
 
 access_id_test() ->
-    req(#{verb=>delete, namespace=>"a.test.my_actors", resource=>accessids, name=>id1}),
+    kapi_req(#{verb=>delete, namespace=>"a.test.my_actors", resource=>accessids, name=>id1}),
 
     B1 = yaml(<<"
         data:
@@ -255,7 +257,7 @@ token_test() ->
     % We kill again but when we activate it again is expired
     exit(Pid2, kill),
     timer:sleep(2100),
-    Params = #{getTotals => true, fieldSelector=><<"metadata.name:", T3_Name/binary>>},
+    Params = #{getTotal => true, fieldSelector=><<"metadata.name:", T3_Name/binary>>},
     % List don't activate, so it still shows the actor
     {ok, #{<<"metadata">>:=#{<<"total">>:=1}}} = kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tokens, params=>Params}),
     {error, #{<<"reason">>:=<<"actor_not_found">>}} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>tokens, name=>T3_Name}),
@@ -448,7 +450,7 @@ task_test() ->
     {created, T5} = kapi_req(#{verb=>create, resource=>tasks, body=>B1}),
     #{
         <<"metadata">> := #{
-            <<"name">> := T5_Name
+            <<"name">> := _T5_Name
         },
         <<"status">> := #{
             <<"taskStatus">> := <<"start">>,
@@ -521,358 +523,373 @@ task_test() ->
 %%        }
 %%    ] = Events3,
     ok.
-%%
-%%
-%%auto_activate_test() ->
-%%    %% See nknamespace_lib:launch_auto_activated/1
-%%
-%%    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>tasks, params=>#{
-%%        fieldSelector => <<"metadata.subtype:TestType">>}}),
-%%
-%%    Y1 = yaml(<<"
-%%        spec:
-%%            maxSecs: 2
-%%        metadata:
-%%            subtype: TestType
-%%            namespace: a.test.my_actors
-%%    ">>),
-%%
-%%    % Create 10 tasks expiring in 2 secs
-%%    Pids1 = lists:map(
-%%        fun(Pos) ->
-%%            Name = nklib_util:to_binary(Pos),
-%%            {created, T} = kapi_req(#{verb=>create, resource=>tasks, name=>Name, body=>Y1}),
-%%            #{<<"metadata">>:=#{<<"name">>:=Name}} = T,
-%%            P = <<"/a.test.my_actors/core/tasks/", Name/binary>>,
-%%            {ok, #actor_id{pid=Pid}, _} = nkservice_actor:find(P),
-%%            true = is_pid(Pid),
-%%            Pid
-%%        end,
-%%        lists:seq(1, 10)),
-%%
-%%    % They are on DB
-%%    {ok, #{<<"metadata">>:=#{<<"total">>:=10}}} =
-%%        kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks}),
-%%
-%%    % They are already activated
-%%    [] = nkactor_api_util:launch_auto_activated(?ROOT_SRV),
-%%
-%%    % We kill them
-%%    lists:foreach(fun(Pid) -> exit(Pid, kill) end, Pids1),
-%%    timer:sleep(50),
-%%
-%%    % They are reactivated by script
-%%    % (you can experiment with values in size, for example 5)
-%%    ActivatedIds = nkactor_api_util:launch_auto_activated(?ROOT_SRV),
-%%    10 = length(ActivatedIds),
-%%    [] = nkactor_api_util:launch_auto_activated(?ROOT_SRV),
-%%    Pids2 = lists:map(
-%%        fun(ActorId) ->
-%%            {true, #actor_id{pid=Pid}} = nkactor:is_activated(ActorId),
-%%            Pid
-%%        end,
-%%        ActivatedIds),
-%%
-%%    % We kill them again, and wait for expiration while unloaded
-%%    lists:foreach(fun(Pid) -> exit(Pid, kill) end, Pids2),
-%%    timer:sleep(2100),
-%%
-%%    % They expired, but yet on db. When we reactivate them, they are deleted
-%%    {ok, #{<<"metadata">>:=#{<<"total">>:=10}}} =
-%%        kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks}),
-%%    lager:error("NKLOG START"),
-%%    ActivatedIds = nkactor_api_util:launch_auto_activated(?ROOT_SRV),
-%%    timer:sleep(500),
-%%    {ok, #{<<"metadata">>:=#{<<"total">>:=0}}} =
-%%        kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks}),
-%%    ok.
-%%
-%%
-%%
-%%
-%%session_test() ->
-%%    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>sessions, params=>#{
-%%        fieldSelector => <<"metadata.subtype:TestType">>}}),
-%%
-%%    Y1 = yaml(<<"
-%%        spec:
-%%            ttlSecs: 2
-%%        data:
-%%            a: 1
-%%        metadata:
-%%            name: s1
-%%            subtype: TestType
-%%            namespace: a.test.my_actors
-%%    ">>),
-%%
-%%    {created, S1} = kapi_req(#{verb=>create, resource=>sessions, body=>Y1}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"Session">>,
-%%        <<"data">> := #{
-%%            <<"a">> := 1
-%%        },
-%%        <<"metadata">> := #{
-%%            <<"subtype">> := <<"TestType">>,
-%%            <<"namespace">> := <<"a.test.my_actors">>,
-%%            <<"uid">> := _S1_UID,
-%%            <<"name">> := <<"s1">>
-%%        },
-%%        <<"status">> := #{<<"isActivated">>:=true}
-%%    } = S1,
-%%
-%%    timer:sleep(1000),
-%%    P = "/a.test.my_actors/core/sessions/s1",
-%%    {ok, {expires, Time1}} = nkactor_srv:sync_op(P, get_unload_policy),
-%%    true = (Time1 - nklib_date:epoch(msecs)) < 1000,
-%%
-%%    lager:error("NKLOG LAUNCH"),
-%%    {ok, #{<<"reason">>:= <<"actor_updated">>}} =
-%%        kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"sessions", name=>s1, subresource=><<"_rpc/refresh">>}),
-%%
-%%    {ok, {expires, Time2}} = nkactor_srv:sync_op(P, get_unload_policy),
-%%    true = (Time2 - nklib_date:epoch(msecs)) > 1500,
-%%
-%%    timer:sleep(2100),
-%%    {error, #{<<"reason">> := <<"actor_not_found">>}} =
-%%        kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"sessions", name=>s1, subresource=><<"_rpc/refresh">>}),
-%%    ok.
-%%
-%%
-%%file_provider_test() ->
-%%    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>files}),
-%%    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>fileproviders}),
-%%
-%%    Y1 = yaml(<<"
-%%        metadata:
-%%            name: fs1
-%%            namespace: a.test.my_actors
-%%    ">>),
-%%    {error, #{<<"message">>:=<<"Missing field: 'spec'">>}} = kapi_req(#{verb=>create, resource=>fileproviders, body=>Y1}),
-%%
-%%    Y1b = yaml(<<"
-%%        spec:
-%%            storageClass: unknown
-%%        metadata:
-%%            name: fs1
-%%            namespace: a.test.my_actors
-%%    ">>),
-%%    {error, #{<<"message">>:=<<"Field 'spec.storageClass' is invalid">>}} = kapi_req(#{verb=>create, resource=>fileproviders, body=>Y1b}),
-%%
-%%
-%%    Y2 = yaml(<<"
-%%        spec:
-%%            storageClass: filesystem
-%%            encryptionAlgo: aes_cfb128
-%%        metadata:
-%%            name: fs1
-%%            namespace: a.test.my_actors
-%%    ">>),
-%%    {error, #{<<"message">>:=<<"Missing field: 'spec.filesystemConfig'">>}} = kapi_req(#{verb=>create, resource=>fileproviders, body=>Y2}),
-%%
-%%
-%%    YFP1 = yaml(<<"
-%%        kind: FileProvider
-%%        spec:
-%%            storageClass: filesystem
-%%            maxSize: 3
-%%            encryptionAlgo: aes_cfb128
-%%            hashAlgo: sha256
-%%            filesystemConfig:
-%%                filePath: '/tmp'
-%%        metadata:
-%%            name: fs1
-%%            namespace: a.test.my_actors
-%%    ">>),
-%%
-%%    {created, FP1} = kapi_req(#{verb=>create, body=>YFP1}),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"FileProvider">>,
-%%        spec := #{
-%%            <<"storageClass">> := <<"filesystem">>,
-%%            <<"encryptionAlgo">> := <<"aes_cfb128">>,
-%%            <<"hashAlgo">> := <<"sha256">>,
-%%            <<"filesystemConfig">> := #{
-%%                <<"filePath">> := <<"/tmp">>
-%%            }
-%%        },
-%%        <<"metadata">> := #{
-%%            <<"namespace">> := <<"a.test.my_actors">>,
-%%            <<"uid">> := FP1_UID,
-%%            <<"name">> := <<"fs1">>
-%%        },
-%%        <<"status">> := #{<<"isActivated">>:=true}
-%%    } = FP1,
-%%    {ok, _, #{
-%%        id := FP1_UID,
-%%        storageClass := <<"filesystem">>,
-%%        encryptionAlgo := aes_cfb128,
-%%        hashAlgo := sha256,
-%%        maxSize := 3,
-%%        filesystemConfig := #{filePath := <<"/tmp">>}
-%%    }} = nknamespace_file_provider_actor:op_get_spec(?ROOT_SRV, "/a.test.my_actors/core/fileproviders/fs1"),
-%%
-%%    SFP2 = <<"
-%%        kind: FileProvider
-%%        spec:
-%%            storageClass: s3
-%%            encryptionAlgo: aes_cfb128
-%%            s3Config:
-%%                scheme: http
-%%                host: localhost
-%%                port: 9000
-%%                key: '5UBED0Q9FB7MFZ5EWIO'
-%%                secret: 'CaK4frX0uixBOh16puEsWEvdjQ3X3RTDvkvE+tUI'
-%%                bucket: bucket1
-%%        metadata:
-%%            name: fs2
-%%            namespace: a.test.my_actors
-%%    ">>,
-%%
-%%    {created, _FP2} = kapi_req(#{verb=>create, body=>yaml(SFP2)}),
-%%
-%%    SFP3 = re:replace(SFP2, <<"bucket: bucket1">>, <<"bucket: bucket2">>, [{return, binary}]),
-%%    {error, #{<<"message">>:=<<"Tried to update immutable field: 'spec.s3Config.bucket'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP3)}),
-%%
-%%    SFP4 = re:replace(SFP2, <<"encryptionAlgo:">>, <<"#encryptionAlgo:">>, [{return, binary}]),
-%%    {error, #{<<"message">>:=<<"Tried to update immutable field: 'spec.encryptionAlgo'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP4)}),
-%%
-%%    SFP5 = re:replace(SFP2, <<"host: localhost">>, <<"host: 127.0.0.1">>, [{return, binary}]),
-%%    {ok, #{spec:=#{<<"s3Config">>:=#{<<"host">>:=<<"127.0.0.1">>}}}} = kapi_req(#{verb=>update, body=>yaml(SFP5)}),
-%%    ok.
-%%
-%%
-%%file_test() ->
-%%    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>files}),
-%%    {ok, #{<<"metadata">>:=#{<<"uid">>:=FS1_UID}}} =
-%%        kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"fileproviders", name=>fs1}),
-%%
-%%    % Create a file with bodyBase64
-%%    Body = base64:encode(<<"123">>),
-%%    Y1 = yaml(<<"
-%%        kind: File
-%%        spec:
-%%            contentType: type1
-%%            bodyBase64: '", Body/binary, "'
-%%            provider: /apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1
-%%        metadata:
-%%            name: f1
-%%    ">>),
-%%    {created, F1} = kapi_req(#{verb=>create, namespace=>"a.test.my_actors", body=>Y1}),
-%%    Hash = base64:encode(crypto:hash(sha256, <<"123">>)),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"File">>,
-%%        spec := #{
-%%            <<"contentType">> := <<"type1">>,
-%%            <<"externalId">> := F1_UID,
-%%            <<"provider">> := <<"/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1">>,
-%%            <<"size">> := 3,
-%%            <<"password">> := _,
-%%            <<"hash">> := Hash
-%%        } = Spec1,
-%%        <<"metadata">> := #{
-%%            <<"uid">> := F1_UID,
-%%            <<"name">> := <<"f1">>,
-%%            <<"links">> := #{
-%%                FS1_UID := <<"io.netc.core.file-provider">>
-%%            }
-%%        } = Meta1,
-%%        <<"status">> := #{<<"isActivated">> := true}
-%%    } = F1,
-%%    false = maps:is_key(<<"bodyBase64">>, Spec1),
-%%
-%%    % Check it is on disk
-%%    {ok, B2} = file:read_file(<<"/tmp/", F1_UID/binary>>),
-%%    3 = byte_size(B2),
-%%    true = B2 /= <<"123">>,
-%%
-%%    % Cannot remove provider
-%%    {error, #{<<"reason">>:=<<"actor_has_linked_actors">>}} =
-%%        kapi_req(#{verb=>delete, namespace=>"a.test.my_actors", resource=>"fileproviders", name=>fs1}),
-%%
-%%    % Get the body direct
-%%    {ok, <<"type1">>, <<"123">>} = nknamespace_file_actor:op_get_body(?ROOT_SRV, F1_UID),
-%%
-%%    % Get the object and the body inline
-%%    {200, F1} = http_get("/namespaces/a.test.my_actors/files/f1"),
-%%    {200, F2} = http_get("/namespaces/a.test.my_actors/files/f1?getBodyInline=true"),
-%%    #{spec:=#{<<"bodyBase64">>:=Body}} = F2,
-%%
-%%    % Get a direct download
-%%    {ok, {{_, 200, _}, Hds, "123"}} = nkactor_core_test_util:httpc("/namespaces/a.test.my_actors/files/f1/_download"),     "type1" = nklib_util:get_value("content-type", Hds),
-%%
-%%
-%%    % Cannot update file
-%%    Y2 = maps:remove(<<"status">>, F1#{
-%%        spec := Spec1#{
-%%            <<"contentType">> := <<"type2">>
-%%        }
-%%    }),
-%%    {error, #{ <<"message">>:=<<"Tried to update immutable field: 'spec.contentType'">>}} =
-%%        kapi_req(#{verb=>update, namespace=>"a.test.my_actors", name=>f1, body=>Y2}),
-%%
-%%    % But can add annotations, etc.
-%%    Y3 = maps:remove(<<"status">>, F1#{
-%%        <<"metadata">> := Meta1#{
-%%            <<"annotations">> => #{
-%%                <<"ann1">> => <<"v1">>
-%%            }
-%%        }
-%%    }),
-%%    {ok, F3} = kapi_req(#{verb=>update, body=>Y3}),
-%%    #{<<"metadata">> := #{<<"annotations">> := #{<<"ann1">>:=<<"v1">>}}} = F3,
-%%
-%%    % Filesystem uses standard downloads
-%%    {200, #{<<"url">> := Url}} = http_get("/namespaces/a.test.my_actors/files/f1/_rpc/downloadLink"),
-%%    <<"_download">> = lists:last(binary:split(Url, <<"/">>, [global])),
-%%
-%%    % Send direct to _upload
-%%    {ok, {{_, 400, _}, _Hds, Body4}} = nkactor_core_test_util:httpc(post, "/namespaces/a.test.my_actors/files/f1/_upload", "ct2", <<"321">>),
-%%    #{ <<"message">> := <<"Missing field: 'provider'">>} = nklib_json:decode(Body4),
-%%    {ok, {{_, 201, _}, _, Body5}} = nkactor_core_test_util:httpc(
-%%        post,
-%%        "/namespaces/a.test.my_actors/files/_upload?provider=/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1",
-%%        "ct2",
-%%        <<"321">>),
-%%    #{
-%%        <<"apiVersion">> := <<"core/v1a1">>,
-%%        <<"kind">> := <<"File">>,
-%%        <<"metadata">> := #{
-%%            <<"namespace">> := <<"a.test.my_actors">>,
-%%            <<"name">> := _,
-%%            <<"links">> := #{
-%%                FS1_UID := <<"io.netc.core.file-provider">>
-%%            }
-%%        },
-%%        spec := #{
-%%            <<"contentType">> := <<"ct2">>,
-%%            <<"externalId">> := <<"files-", _/binary>>,
-%%            <<"hash">> := Hash2,
-%%            <<"password">> := _,
-%%            <<"provider">> := <<"/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1">>,
-%%            <<"size">> := 3
-%%        }
-%%    } = nklib_json:decode(Body5),
-%%    Hash2 = base64:encode(crypto:hash(sha256, <<"321">>)),
-%%
-%%    % Direct to _upload, but through provider, first one is too large
-%%    {ok, {{_, 400, _}, _, Body6}} =
-%%        nkactor_core_test_util:httpc(
-%%            post,
-%%            "/namespaces/a.test.my_actors/fileproviders/fs1/files/_upload",
-%%            "ct3",
-%%            <<"4321">>),
-%%    #{<<"reason">> := <<"file_too_large">>} = nklib_json:decode(Body6),
-%%
-%%    % Direct to _upload, but through provider
-%%    {ok, {{_, 201, _}, _, Body7}} = nkactor_core_test_util:httpc(
-%%        post,
-%%        "/namespaces/a.test.my_actors/fileproviders/fs1/files/_upload",
-%%        "ct3",
-%%        <<"321">>),
-%%    #{spec := #{<<"contentType">>:=<<"ct3">>, <<"hash">>:=Hash2}} = nklib_json:decode(Body7),
-%%    ok.
-%%
-%%
+
+
+auto_activate_test() ->
+    {ok, _} = kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>tasks,
+                params=>#{fieldSelector => <<"metadata.subtype:TestType">>}}),
+
+    Y1 = yaml(<<"
+        spec:
+            maxSecs: 2
+        metadata:
+            subtype: TestType
+            namespace: a.test.my_actors
+    ">>),
+
+    % Create 10 tasks expiring in 2 secs
+    Pids1 = lists:map(
+        fun(Pos) ->
+            Name = nklib_util:to_binary(Pos),
+            {created, T} = kapi_req(#{verb=>create, resource=>tasks, name=>Name, body=>Y1}),
+            #{<<"metadata">>:=#{<<"name">>:=Name}} = T,
+            P = <<"core:tasks:", Name/binary, ".a.test.my_actors">>,
+            {true, Pid} = nkactor:is_activated(P),
+            Pid
+        end,
+        lists:seq(1, 10)),
+
+    % They are on DB
+    {ok, #{<<"metadata">>:=#{<<"total">>:=10}}} =
+        kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks, params=>#{getTotal=>true}}),
+
+    % They are already activated, not expired
+    {ok, []} = nkactor:activate_actors(?ACTOR_SRV),
+    {ok, [], _} = nkactor:search_expired(?ACTOR_SRV, #{}),
+
+    % We kill them
+    lists:foreach(fun(Pid) -> exit(Pid, kill) end, Pids1),
+    timer:sleep(50),
+
+    % They are reactivated by script
+
+    {ok, ActivatedIds} = nkactor:activate_actors(?ACTOR_SRV),
+    10 = length(ActivatedIds),
+    {ok, []} = nkactor:activate_actors(?ACTOR_SRV),
+    Pids2 = lists:map(
+        fun(ActorId) ->
+            {true, Pid} = nkactor:is_activated(ActorId),
+            Pid
+        end,
+        ActivatedIds),
+
+    % We kill them again, and wait for expiration while unloaded
+    lists:foreach(fun(Pid) -> exit(Pid, kill) end, Pids2),
+    timer:sleep(2100),
+
+    % We find them as expired
+    {ok, ExpiredIds2, _} = nkactor:search_expired(?ACTOR_SRV, #{}),
+    10 = length(ExpiredIds2),
+
+    % They expired, but yet on db. When we try to reactivate them, they are deleted
+    {ok, #{<<"metadata">>:=#{<<"total">>:=10}}} =
+        kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks,
+                   params=>#{getTotal=>true}}),
+
+    % If we try to activate them, they will deleted on load
+    {ok, []} = nkactor:activate_actors(?ACTOR_SRV),
+    timer:sleep(500),
+    {ok, #{<<"metadata">>:=#{<<"size">>:=0}}} =
+        kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks}),
+    ok.
+
+
+
+
+session_test() ->
+    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>sessions, params=>#{
+        fieldSelector => <<"metadata.subtype:TestType">>}}),
+
+    Y1 = yaml(<<"
+        spec:
+            ttlSecs: 2
+        data:
+            a: 1
+        metadata:
+            name: s1
+            subtype: TestType
+            namespace: a.test.my_actors
+    ">>),
+
+    {created, S1} = kapi_req(#{verb=>create, resource=>sessions, body=>Y1}),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"Session">>,
+        <<"spec">> := #{
+            <<"ttlSecs">> := 2
+        },
+        <<"data">> := #{
+            <<"a">> := 1
+        },
+        <<"metadata">> := #{
+            <<"subtype">> := <<"TestType">>,
+            <<"namespace">> := <<"a.test.my_actors">>,
+            <<"uid">> := _S1_UID,
+            <<"name">> := <<"s1">>
+        }
+    } = S1,
+
+    timer:sleep(1000),
+    P = "core:sessions:s1.a.test.my_actors",
+    {ok, {expires, Time1}} = nkactor_srv:sync_op(P, get_unload_policy),
+    true = (Time1 - nklib_date:epoch(msecs)) < 1000,
+
+    {status, #{<<"reason">>:= <<"actor_updated">>}} =
+        kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"sessions", name=>s1, subresource=><<"_rpc/refresh">>}),
+
+    {ok, {expires, Time2}} = nkactor_srv:sync_op(P, get_unload_policy),
+    true = (Time2 - nklib_date:epoch(msecs)) > 1500,
+
+    timer:sleep(2100),
+    {error, #{<<"reason">> := <<"actor_not_found">>}} =
+        kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"sessions", name=>s1, subresource=><<"_rpc/refresh">>}),
+    ok.
+
+
+file_provider_test() ->
+    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>files}),
+    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>fileproviders}),
+
+    Y1 = yaml(<<"
+        metadata:
+            name: fs1
+            namespace: a.test.my_actors
+    ">>),
+    {error, #{<<"message">>:=<<"Field 'spec' is missing">>}} = kapi_req(#{verb=>create, resource=>fileproviders, body=>Y1}),
+
+    Y1b = yaml(<<"
+        spec:
+            storageClass: unknown
+        metadata:
+            name: fs1
+            namespace: a.test.my_actors
+    ">>),
+    {error, #{<<"message">>:=<<"Field 'spec.storageClass' is invalid">>}} = kapi_req(#{verb=>create, resource=>fileproviders, body=>Y1b}),
+
+
+    Y2 = yaml(<<"
+        spec:
+            storageClass: nkfile_filesystem
+            encryptionAlgo: aes_cfb128
+        metadata:
+            name: fs1
+            namespace: a.test.my_actors
+    ">>),
+    {error, #{<<"message">>:=<<"Field 'spec.filesystemConfig' is missing">>}} = kapi_req(#{verb=>create, resource=>fileproviders, body=>Y2}),
+
+
+    Y2b = yaml(<<"
+        spec:
+            storageClass: filesystem
+            encryptionAlgo: aes_cfb128
+        metadata:
+            name: fs1
+            namespace: a.test.my_actors
+    ">>),
+    {error, #{<<"message">>:=<<"Field 'spec.storageClass' is invalid">>}} = kapi_req(#{verb=>create, resource=>fileproviders, body=>Y2b}),
+
+
+    YFP1 = yaml(<<"
+        kind: FileProvider
+        spec:
+            storageClass: nkfile_filesystem
+            maxSize: 3
+            encryptionAlgo: aes_cfb128
+            hashAlgo: sha256
+            filesystem_config:
+                file_path: '/tmp'
+        metadata:
+            name: fs1
+            namespace: a.test.my_actors
+    ">>),
+
+    {created, FP1} = kapi_req(#{verb=>create, body=>YFP1}),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"FileProvider">>,
+        <<"spec">> := #{
+            <<"storageClass">> := <<"nkfile_filesystem">>,
+            <<"encryptionAlgo">> := <<"aes_cfb128">>,
+            <<"hashAlgo">> := <<"sha256">>,
+            <<"filesystemConfig">> := #{
+                <<"filePath">> := <<"/tmp">>
+            }
+        },
+        <<"metadata">> := #{
+            <<"namespace">> := <<"a.test.my_actors">>,
+            <<"uid">> := FP1_UID,
+            <<"name">> := <<"fs1">>
+        }
+    } = FP1,
+    {ok, _, #{
+        id := FP1_UID,
+        storage_class := nkfile_filesystem,
+        encryption_algo := aes_cfb128,
+        hash_algo := sha256,
+        max_size := 3,
+        filesystem_config := #{file_path := <<"/tmp">>}
+    }} = nkactor_core_file_provider_actor:op_get_spec("core:fileproviders:fs1.a.test.my_actors"),
+
+    SFP2 = <<"
+        kind: FileProvider
+        spec:
+            storageClass: nkfile_s3
+            encryptionAlgo: aes_cfb128
+            s3Config:
+                scheme: http
+                host: localhost
+                port: 9000
+                key: '5UBED0Q9FB7MFZ5EWIO'
+                secret: 'CaK4frX0uixBOh16puEsWEvdjQ3X3RTDvkvE+tUI'
+                bucket: bucket1
+        metadata:
+            name: fs2
+            namespace: a.test.my_actors
+    ">>,
+
+    {created, _FP2} = kapi_req(#{verb=>create, body=>yaml(SFP2)}),
+
+    SFP3 = re:replace(SFP2, <<"bucket: bucket1">>, <<"bucket: bucket2">>, [{return, binary}]),
+    {error, #{<<"message">>:=<<"Updated invalid field 'spec.s3Config.bucket'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP3)}),
+
+    SFP4 = re:replace(SFP2, <<"encryptionAlgo:">>, <<"#encryptionAlgo:">>, [{return, binary}]),
+    {error, #{<<"message">>:=<<"Updated invalid field 'spec.encryptionAlgo'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP4)}),
+
+    SFP5 = re:replace(SFP2, <<"host: localhost">>, <<"host: 127.0.0.1">>, [{return, binary}]),
+    {ok, #{<<"spec">>:=#{<<"s3Config">>:=#{<<"host">>:=<<"127.0.0.1">>}}}} = kapi_req(#{verb=>update, body=>yaml(SFP5)}),
+    ok.
+
+
+file_test() ->
+    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>files}),
+
+    {ok, #{<<"metadata">>:=#{<<"uid">>:=FS1_UID}}} =
+        kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"fileproviders", name=>fs1}),
+
+    % Create a file with bodyBase64
+    Body = base64:encode(<<"123">>),
+    Y1 = yaml(<<"
+        kind: File
+        spec:
+            contentType: type1
+            bodyBase64: '", Body/binary, "'
+            provider: /apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1
+        metadata:
+            name: f1
+    ">>),
+    {created, F1} = kapi_req(#{verb=>create, namespace=>"a.test.my_actors", body=>Y1}),
+    Hash = base64:encode(crypto:hash(sha256, <<"123">>)),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"File">>,
+        <<"spec">> := #{
+            <<"contentType">> := <<"type1">>,
+            <<"externalId">> := F1_UID,
+            <<"provider">> := <<"/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1">>,
+            <<"size">> := 3,
+            <<"password">> := _,
+            <<"hash">> := Hash
+        } = Spec1,
+        <<"metadata">> := #{
+            <<"uid">> := F1_UID,
+            <<"name">> := <<"f1">>,
+            <<"links">> := #{
+                FS1_UID :=  <<"io.netk.core.fileproviders">>
+            }
+        } = Meta1
+    } = F1,
+    false = maps:is_key(<<"bodyBase64">>, Spec1),
+
+    % Check it is on disk
+    {ok, B2} = file:read_file(<<"/tmp/", F1_UID/binary>>),
+    3 = byte_size(B2),
+    true = B2 /= <<"123">>,
+
+    % Cannot remove provider
+    {error, #{<<"reason">>:=<<"actor_has_linked_actors">>}} =
+        kapi_req(#{verb=>delete, namespace=>"a.test.my_actors", resource=>"fileproviders", name=>fs1}),
+
+    % Get the body direct
+    {ok, <<"type1">>, <<"123">>} = nkactor_core_file_actor:op_get_body(F1_UID),
+
+    % Get the object and the body inline
+    {200, F1} = http_get("/namespaces/a.test.my_actors/files/f1"),
+    {200, F2} = http_get("/namespaces/a.test.my_actors/files/f1?getBodyInline=true"),
+    #{<<"spec">>:=#{<<"bodyBase64">>:=Body}} = F2,
+
+    % Get a direct download
+    {ok, {{_, 200, _}, Hds, "123"}} = nkactor_core_test_util:httpc("/namespaces/a.test.my_actors/files/f1/_download"),     "type1" = nklib_util:get_value("content-type", Hds),
+
+
+    % Cannot update file
+    Y2 = maps:remove(<<"status">>, F1#{
+        <<"spec">> := Spec1#{
+            <<"contentType">> := <<"type2">>
+        }
+    }),
+    {error, #{ <<"message">>:=<<"Updated invalid field 'spec.contentType'">>}} =
+        kapi_req(#{verb=>update, namespace=>"a.test.my_actors", name=>f1, body=>Y2}),
+
+    % But can add annotations, etc.
+    Y3 = maps:remove(<<"status">>, F1#{
+        <<"metadata">> := Meta1#{
+            <<"annotations">> => #{
+                <<"ann1">> => <<"v1">>
+            }
+        }
+    }),
+    {ok, F3} = kapi_req(#{verb=>update, body=>Y3}),
+    #{<<"metadata">> := #{<<"annotations">> := #{<<"ann1">>:=<<"v1">>}}} = F3,
+
+    % Filesystem uses standard downloads
+    {200, #{<<"url">> := Url}} = http_get("/namespaces/a.test.my_actors/files/f1/_rpc/downloadLink"),
+    <<"_download">> = lists:last(binary:split(Url, <<"/">>, [global])),
+
+    % Send direct to _upload
+    {ok, {{_, 400, _}, _Hds, Body4}} = nkactor_core_test_util:httpc(post, "/namespaces/a.test.my_actors/files/f1/_upload", "ct2", <<"321">>),
+    #{ <<"message">> := <<"Missing field: 'provider'">>} = nklib_json:decode(Body4),
+    {ok, {{_, 201, _}, _, Body5}} = nkactor_core_test_util:httpc(
+        post,
+        "/namespaces/a.test.my_actors/files/_upload?provider=/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1",
+        "ct2",
+        <<"321">>),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"File">>,
+        <<"metadata">> := #{
+            <<"namespace">> := <<"a.test.my_actors">>,
+            <<"name">> := _,
+            <<"links">> := #{
+                FS1_UID := <<"io.netc.core.file-provider">>
+            }
+        },
+        <<"spec">> := #{
+            <<"contentType">> := <<"ct2">>,
+            <<"externalId">> := <<"files-", _/binary>>,
+            <<"hash">> := Hash2,
+            <<"password">> := _,
+            <<"provider">> := <<"/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1">>,
+            <<"size">> := 3
+        }
+    } = nklib_json:decode(Body5),
+    Hash2 = base64:encode(crypto:hash(sha256, <<"321">>)),
+
+    % Direct to _upload, but through provider, first one is too large
+    {ok, {{_, 400, _}, _, Body6}} =
+        nkactor_core_test_util:httpc(
+            post,
+            "/namespaces/a.test.my_actors/fileproviders/fs1/files/_upload",
+            "ct3",
+            <<"4321">>),
+    #{<<"reason">> := <<"file_too_large">>} = nklib_json:decode(Body6),
+
+    % Direct to _upload, but through provider
+    {ok, {{_, 201, _}, _, Body7}} = nkactor_core_test_util:httpc(
+        post,
+        "/namespaces/a.test.my_actors/fileproviders/fs1/files/_upload",
+        "ct3",
+        <<"321">>),
+    #{spec := #{<<"contentType">>:=<<"ct3">>, <<"hash">>:=Hash2}} = nklib_json:decode(Body7),
+    ok.
+
+

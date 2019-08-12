@@ -415,7 +415,7 @@ list_test_1() ->
 
     P1 = #{
         deep => true,
-        get_totals => true,
+        get_total => true,
         filter => #{
             'and' => [#{field=><<"resource">>, op=>eq, value=><<"configmaps">>}]
         },
