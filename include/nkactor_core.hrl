@@ -22,6 +22,8 @@
 -define(RES_CORE_FILE_PROVIDERS, <<"fileproviders">>).
 -define(RES_CORE_NODES, <<"nodes">>).
 
+-define(LINK_MEMBER_USER, <<"member-user.core.netc.io">>).
+
 %-define(LINK_CORE_FILE_PROVIDER, <<"file-provider">>).
 %-define(LINK_CORE_CONTACT_USER, <<"contact-user">>).
 

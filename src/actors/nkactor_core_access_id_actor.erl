@@ -23,10 +23,21 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/2]).
+-export([find_id/3]).
+-export([config/0, parse/2, update/2]).
 
 -include("nkactor_core.hrl").
 
+-define(LABEL_ID, <<"id.netc.io">>).
+
+
+
+%% ===================================================================
+%% API
+%% ===================================================================
+
+find_id(SrvId, Class, Id) ->
+    nkactor:find_label(SrvId, make_label_key(Class), Id).
 
 
 %% ===================================================================
@@ -44,6 +55,39 @@ config() ->
 
 
 %% @doc
-parse(_Actor, _Req) ->
-    {syntax, <<"v1a1">>, #{data => map}}.
+parse(Actor, _Req) ->
+    Syntax = #{
+        spec => #{
+            class => binary,
+            id => binary,
+            '__mandatory' => [class, id]
+        }
+    },
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+        {ok, Actor2} ->
+            {ok, add_label(Actor2)};
+        {error, Error} ->
+            {error, Error}
+    end.
 
+
+%% @doc
+update(Actor, State) ->
+    Actor2 = nkactor_lib:rm_label_re(?LABEL_ID, Actor),
+    Actor3 = add_label(Actor2),
+    {ok, Actor3, State}.
+
+
+
+
+%% ===================================================================
+%% Internal
+%% ===================================================================
+
+%% @private
+add_label(#{data:=#{spec:=#{class:=Class, id:=Id}}}=Actor) ->
+    nkactor_lib:add_label(make_label_key(Class), Id, Actor).
+
+%% @private
+make_label_key(Class) ->
+    <<Class/binary, $., ?LABEL_ID/binary>>.

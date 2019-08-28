@@ -24,17 +24,31 @@
 
 -behavior(nkactor_actor).
 
+-export([find_id/3]).
 -export([op_check_pass/2]).
--export([config/0, parse/2, unparse/2, get/2, request/4, sync_op/3]).
+-export([config/0, parse/2, get/2, request/4, init/2, update/2, sync_op/3]).
 -export([store_pass/1]).
 
 -include_lib("nkactor/include/nkactor.hrl").
+-include_lib("nkactor/include/nkactor_debug.hrl").
 -include("nkactor_core.hrl").
 -include_lib("nkpacket/include/nkpacket.hrl").
 
 -define(MAGIC_PASS, <<226,141,134,226,132,153,226,141,133>>). %%  "⍆ℙ⍅"/utf8
 -define(INVALID_PASS_SLEEP, 250).
+-define(LABEL_ID, <<"login-user.core.netc.io">>).
 
+%% ===================================================================
+%% API
+%% ===================================================================
+
+find_id(SrvId, Namespace, Id) ->
+    case nkactor:find_label(SrvId, Namespace, ?LABEL_ID, Id) of
+        {error, {label_not_found, _}} ->
+            {error, {login_unknown, Id}};
+        Other ->
+            Other
+    end.
 
 
 %% ===================================================================
@@ -61,7 +75,17 @@ config() ->
         resource => ?RES_CORE_USERS,
         versions => [<<"0">>],
         verbs => [create, delete, deletecollection, get, list, patch, update, watch],
-        short_names => [u]
+        short_names => [u],
+        fields_filter => [
+            'spec.login',
+            'spec.member'
+        ],
+        fields_sort => [
+            'spec.login'
+        ],
+        fields_static => [
+            'spec.login'
+        ]
     }.
 
 
@@ -71,19 +95,12 @@ parse(_Actor, _Req) ->
         StoredPass = store_pass(Pass),
         {ok, StoredPass}
     end,
-    {syntax, <<"v1a1">>, #{spec=>#{password => Fun}}}.
-
-
-%% @doc
-unparse(Actor, _Req) ->
-    case Actor of
-        #{data:=#{<<"spec">>:=#{<<"password">>:=_}=Spec}=Data} ->
-            Actor2 = Actor#{data:=Data#{<<"spec">>:=Spec#{<<"password">>:=<<>>}}},
-            {ok, Actor2};
-        _ ->
-            continue
-    end.
-
+    Spec = #{
+        login => binary,
+        member => binary,
+        password => Fun
+    },
+    {syntax, <<"v1a1">>, #{spec=>Spec}}.
 
 
 %% @doc
@@ -114,6 +131,14 @@ request(_Verb, _Path, _ActorId, _Req) ->
     continue.
 
 
+%% @doc
+init(create, #actor_st{actor = Actor}=ActorSt) ->
+    {ok, ActorSt#actor_st{actor=add_label(Actor)}};
+
+init(start, ActorSt) ->
+    {ok, ActorSt}.
+
+
 %% @doc 
 get(Actor, ActorSt) ->
     #{data:=Data} = Actor,
@@ -127,10 +152,16 @@ get(Actor, ActorSt) ->
 
 
 %% @doc
+%% We don't really support updating the login through standard updated
+update(Actor, ActorSt) ->
+    {ok, add_label(Actor), ActorSt}.
+
+
+%% @doc
 sync_op({nkactor_check_pass, Pass}, _From, ActorSt) ->
     #actor_st{actor=#{data:=Data}} = ActorSt,
     Valid = case Data of
-        #{spec:=#{password:=Stored}} ->
+        #{spec:=#{password:=Stored}} when Stored /= <<>> ->
             store_pass(Pass) == Stored;
         _ ->
             false
@@ -156,6 +187,8 @@ store_pass(Pass) ->
     case binary:split(Pass2, ?MAGIC_PASS) of
         [<<>>, _] ->
             Pass2;
+        _ when Pass == <<>> ->
+            <<>>;
         _ ->
             Salt = <<"netcomposer">>,
             Iters = nkactor_core_app:get(pbkdf_iters),
@@ -163,6 +196,15 @@ store_pass(Pass) ->
             Hash = nklib_util:lhash(Pbkdf2),
             <<?MAGIC_PASS/binary, Hash/binary>>
     end.
+
+
+%% @private
+add_label(#{data:=#{spec:=#{login:=Login}}}=Actor) ->
+    Actor2 = nkactor_lib:rm_label_re(?LABEL_ID, Actor),
+    nkactor_lib:add_label(?LABEL_ID, Login, Actor2);
+
+add_label(ActorSt) ->
+    ActorSt.
 
 
 %% @private
