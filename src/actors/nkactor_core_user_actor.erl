@@ -32,7 +32,6 @@
 -include_lib("nkactor/include/nkactor.hrl").
 -include_lib("nkactor/include/nkactor_debug.hrl").
 -include("nkactor_core.hrl").
--include_lib("nkpacket/include/nkpacket.hrl").
 
 -define(MAGIC_PASS, <<226,141,134,226,132,153,226,141,133>>). %%  "⍆ℙ⍅"/utf8
 -define(INVALID_PASS_SLEEP, 250).
