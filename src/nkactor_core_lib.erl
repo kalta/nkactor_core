@@ -108,7 +108,6 @@ update_linked_user_login(NewActor, #actor_st{actor=OldActor}=ActorSt) ->
     NewLogin = maps:get(login, NewSpec, OldLogin),
     case NewLogin == OldLogin of
         true ->
-            lager:error("NKLOG SKIP1"),
             {ok, ActorSt#actor_st{actor=NewActor}};
         false ->
             ActorSt3 = case delete_linked_user(NewActor, ActorSt) of
@@ -128,7 +127,7 @@ update_linked_user_login(NewActor, #actor_st{actor=OldActor}=ActorSt) ->
                         {ok, Actor4} ->
                             {ok, ActorSt3#actor_st{actor=Actor4}};
                         {error, CreateError} ->
-                            {error, CreateError}
+                            {error, CreateError, ActorSt}
                     end
             end
     end.
