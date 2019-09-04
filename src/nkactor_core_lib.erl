@@ -21,7 +21,7 @@
 %% @doc NkActor User Actor
 -module(nkactor_core_lib).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
--export([create_linked_user/1, update_linked_user_password/2,
+-export([create_linked_user/1, update_linked_user_password/3, update_linked_user_password/2,
          update_linked_user_login/2, delete_linked_user/2]).
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -82,6 +82,23 @@ create_linked_user(Actor) ->
             end;
         _ ->
             {ok, Actor}
+    end.
+
+
+%% @doc Updates a linked user's password, checking old first
+update_linked_user_password(OldPass, NewPass, Actor) ->
+    case Actor of
+        #{data:=#{status:=#{user_uid:=UserUID}}} ->
+            case nkactor_core_user_actor:op_check_pass(UserUID, OldPass) of
+                {ok, true} ->
+                    update_linked_user_password(NewPass, Actor);
+                {ok, false} ->
+                    {error, password_invalid};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        _ ->
+            {error, user_not_linked}
     end.
 
 
