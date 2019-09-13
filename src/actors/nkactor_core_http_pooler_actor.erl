@@ -23,7 +23,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -behavior(nkactor_actor).
 
--export([config/0, parse/2]).
+-export([config/0, parse/3]).
 -export([init/2, delete/1]).
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -44,12 +44,12 @@ config() ->
         versions => [<<"0">>],
         resource => ?RES_CORE_HTTP_POOOLER,
         camel => <<"HttpPooler">>,
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch]
+        verbs => [create, delete, deletecollection, get, list, update, watch]
     }.
 
 
 %% @doc
-parse(_Actor, _Req) ->
+parse(_Verb, _Actor, Req) ->
     Syntax = #{
         spec => #{
             id => binary,
@@ -59,7 +59,7 @@ parse(_Actor, _Req) ->
         },
         '__mandatory' => [spec]
     },
-    {syntax, <<"v1a1">>, Syntax}.
+    {syntax, <<"v1a1">>, Syntax, Req}.
 
 
 

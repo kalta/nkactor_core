@@ -25,7 +25,7 @@
 -behavior(nkactor_actor).
 
 -export([op_get_body/1, op_get_download_link/2, op_get_media/1]).
--export([config/0, parse/2, request/4, sync_op/3]).
+-export([config/0, parse/3, request/4, sync_op/3]).
 
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -76,7 +76,7 @@ config() ->
         resource => ?RES_CORE_FILES,
         group => ?GROUP_CORE,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch, upload],
+        verbs => [create, delete, deletecollection, get, list, update, watch, upload],
         fields_filter => [
             'spec.name',
             'spec.size',
@@ -104,7 +104,7 @@ config() ->
 
 
 %% @doc
-parse(Actor, #{verb:=create}=Req) ->
+parse(create, Actor, Req) ->
     Syntax = #{
         spec => #{
             content_type => binary,
@@ -116,7 +116,7 @@ parse(Actor, #{verb:=create}=Req) ->
         },
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
         {ok, Actor2} ->
             #{data:=#{spec:=Spec2}}=Actor2,
             Params = maps:get(params, Req, #{}),
@@ -127,7 +127,7 @@ parse(Actor, #{verb:=create}=Req) ->
 
 %% We allow fields in case they didn't change
 %% fields_static makes sure no one is changed
-parse(_Actor, #{verb:=update}) ->
+parse(update, _Actor, Req) ->
     Syntax = #{
         spec => #{
             content_type => binary,
@@ -139,7 +139,7 @@ parse(_Actor, #{verb:=update}) ->
         },
         '__mandatory' => [spec]
     },
-    {syntax, <<"v1a1">>, Syntax}.
+    {syntax, <<"v1a1">>, Syntax, Req}.
 
 
 %% @doc

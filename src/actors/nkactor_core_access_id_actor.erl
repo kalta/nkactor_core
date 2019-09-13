@@ -24,7 +24,7 @@
 -behavior(nkactor_actor).
 
 -export([find_id/3]).
--export([config/0, parse/2, update/2]).
+-export([config/0, parse/3, update/2]).
 
 -include("nkactor_core.hrl").
 
@@ -50,12 +50,12 @@ config() ->
         resource => ?RES_CORE_ACCESS_IDS,
         versions => [<<"v1a1">>],
         camel => <<"AccessId">>,
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch]
+        verbs => [create, delete, deletecollection, get, list, update, watch]
     }.
 
 
 %% @doc
-parse(Actor, _Req) ->
+parse(_Verb, Actor, Req) ->
     Syntax = #{
         spec => #{
             class => binary,
@@ -63,7 +63,7 @@ parse(Actor, _Req) ->
             '__mandatory' => [class, id]
         }
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
         {ok, Actor2} ->
             {ok, add_label(Actor2)};
         {error, Error} ->

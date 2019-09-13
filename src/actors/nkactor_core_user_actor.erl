@@ -26,7 +26,7 @@
 
 -export([find_id/3]).
 -export([op_check_pass/2]).
--export([config/0, parse/2, get/2, request/4, init/2, update/2, sync_op/3]).
+-export([config/0, parse/3, get/2, request/4, init/2, update/2, sync_op/3]).
 -export([store_pass/1]).
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -73,7 +73,7 @@ config() ->
     #{
         resource => ?RES_CORE_USERS,
         versions => [<<"0">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update, watch],
         short_names => [u],
         fields_filter => [
             'spec.login',
@@ -89,7 +89,7 @@ config() ->
 
 
 %% @doc
-parse(_Actor, _Req) ->
+parse(_Verb, _Actor, Req) ->
     Fun = fun(Pass) ->
         StoredPass = store_pass(Pass),
         {ok, StoredPass}
@@ -99,7 +99,7 @@ parse(_Actor, _Req) ->
         member => binary,
         password => Fun
     },
-    {syntax, <<"v1a1">>, #{spec=>Spec}}.
+    {syntax, <<"v1a1">>, #{spec=>Spec}, Req}.
 
 
 %% @doc

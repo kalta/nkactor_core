@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/2]).
+-export([config/0, parse/3]).
 
 -include("nkactor_core.hrl").
 
@@ -40,7 +40,7 @@ config() ->
     #{
         resource => ?RES_CORE_CONTACTS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update, watch],
         short_names => [ct],
         fields_filter => [
             'spec.name',
@@ -67,7 +67,7 @@ config() ->
 
 %% @doc
 %% Valid for normal and CamelCase
-parse(Actor, #{srv:=SrvId}) ->
+parse(_Verb, Actor, #{srv:=SrvId}=Req) ->
     Syntax = #{
         spec => #{
             name => binary,
@@ -136,7 +136,7 @@ parse(Actor, #{srv:=SrvId}) ->
             normalized_surname => binary
         }
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
         {ok, Actor2} ->
             Data = maps:get(data, Actor2, #{}),
             Spec = maps:get(spec, Data, #{}),

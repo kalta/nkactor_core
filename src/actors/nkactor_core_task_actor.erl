@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/2, request/4, init/2, event/2,
+-export([config/0, parse/3, request/4, init/2, event/2,
          sync_op/3, async_op/2, stop/2]).
 -export_type([event/0]).
 
@@ -53,7 +53,7 @@ config() ->
     #{
         resource => ?RES_CORE_TASKS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update, watch],
         auto_activate => true,
         fields_filter => [
             'status.last_try_start_time',
@@ -70,7 +70,7 @@ config() ->
 
 
 %% @doc
-parse(Actor, _Req) ->
+parse(_Verb, Actor, Req) ->
     Syntax = #{
         spec => #{
             job => map,
@@ -92,7 +92,7 @@ parse(Actor, _Req) ->
         '__mandatory' => [spec]
     },
     % Set expires_time based on max_secs
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
         {ok, #{data:=#{spec:=Spec}}=Actor2} ->
             #{max_secs:=MaxSecs} = Spec,
             % If no expires yet, we set it
@@ -248,7 +248,7 @@ do_update_state(Body, ActorSt) ->
         error_msg => binary,
         '__mandatory' => [task_status]
     },
-    case nkactor_lib:parse(Body, Syntax) of
+    case nkactor_lib:parse(Body, Syntax, false) of
         {ok, Status} ->
             {ok, set_status(Status, ActorSt)};
         {error, Error} ->

@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/2]).
+-export([config/0, parse/3]).
 
 -include("nkactor_core.hrl").
 
@@ -38,12 +38,12 @@ config() ->
     #{
         resource => ?RES_CORE_CONFIGMAPS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update, watch],
         camel => <<"ConfigMap">>
     }.
 
 
 %% @doc
-parse(_Actor, _ApiReq) ->
-    {syntax, <<"v1a1">>, #{data => map}}.
+parse(_Verb, _Actor, Req) ->
+    {syntax, <<"v1a1">>, #{data => map}, Req}.
 

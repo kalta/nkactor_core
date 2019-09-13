@@ -32,7 +32,7 @@
 -export([op_get_spec/1, op_get_direct_download_link/2, op_get_upload_link/2,
          op_get_file_meta/2]).
 %%-export([link_to_provider/3]).
--export([config/0, parse/2, request/4, init/2, update/2, sync_op/3]).
+-export([config/0, parse/3, request/4, init/2, update/2, sync_op/3]).
 -export_type([run_state/0]).
 
 
@@ -99,7 +99,7 @@ config() ->
     #{
         resource => ?RES_CORE_FILE_PROVIDERS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch, upload],
+        verbs => [create, delete, deletecollection, get, list, update, watch, upload],
         short_names => [],
         camel => <<"FileProvider">>,
         permanent => true,
@@ -121,7 +121,7 @@ config() ->
 
 
 %% @doc
-parse(Actor, _Req) ->
+parse(_Verb, Actor, Req) ->
     Syntax = #{
         spec => #{
             storage_class => {atom, [nkfile_filesystem, nkfile_s3]},
@@ -152,7 +152,7 @@ parse(Actor, _Req) ->
         },
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
         {ok, #{data:=#{spec:=#{storage_class:=Class}=Spec2}}=Actor2} ->
             case Class of
                 nkfile_filesystem ->
