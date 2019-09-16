@@ -106,7 +106,8 @@ update_linked_user_password(OldPass, NewPass, Actor) ->
 update_linked_user_password(Pass, Actor) ->
     case Actor of
         #{data:=#{status:=#{user_uid:=UserUID}}} ->
-            case nkactor:update(UserUID, #{data=>#{spec=>#{password=>Pass}}}, #{do_patch=>true}) of
+            Update = #{password => Pass},
+            case nkactor:update(UserUID, #{data=>#{spec=>Update}}, #{merge_data=>true}) of
                 {ok, _} ->
                     ok;
                 {error, Error} ->

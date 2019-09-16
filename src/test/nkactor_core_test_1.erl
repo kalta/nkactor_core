@@ -355,7 +355,7 @@ api_test() ->
                 <<"singularName">> := <<"configmap">>,
                 <<"verbs">> := [
                     <<"create">>,<<"delete">>,<<"deletecollection">>,<<"get">>,
-                    <<"list">>,<<"patch">>,<<"update">>,<<"watch">>
+                    <<"list">>,<<"update">>,<<"watch">>
                 ]
             }
             |

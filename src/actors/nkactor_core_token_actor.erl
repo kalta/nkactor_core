@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/2, sync_op/3, init/2, stop/2, request/4]).
+-export([config/0, parse/3, sync_op/3, init/2, stop/2, request/4]).
 
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -41,14 +41,14 @@ config() ->
     #{
         resource => ?RES_CORE_TOKENS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch]
+        verbs => [create, delete, deletecollection, get, list, update, watch]
     }.
 
 
 %% @doc
-parse(Actor, Req) ->
+parse(_Verb, Actor, Req) ->
     Syntax = #{data => map},
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
         {ok, #{metadata:=Meta2}=Actor2} ->
             case maps:is_key(expires_time, Meta2) of
                 true ->

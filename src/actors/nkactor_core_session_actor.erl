@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/2, sync_op/3, init/2, request/4, stop/2]).
+-export([config/0, parse/3, sync_op/3, init/2, request/4, stop/2]).
 
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -40,12 +40,12 @@ config() ->
     #{
         resource => ?RES_CORE_SESSIONS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, patch, update, watch]
+        verbs => [create, delete, deletecollection, get, list, update, watch]
     }.
 
 
 %% @doc
-parse(Actor, _ApiReq) ->
+parse(_Verb, Actor, Req) ->
     Syntax = #{
         spec => #{
             ttl_secs => pos_integer,
@@ -54,7 +54,7 @@ parse(Actor, _ApiReq) ->
         data => map,
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax) of
+    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
         {ok, #{data:=Data2}=Actor2} ->
             #{spec:=#{ttl_secs:=Secs}} = Data2,
             Actor3 = nkactor_lib:maybe_set_ttl(Actor2, 1000*Secs),
