@@ -96,10 +96,10 @@ http_request(Verb, Path, Req, _State) ->
     nkactor_kapi:http_request(test_actors, Verb, Path, Req).
 
 
-actor_authorize(#{auth:=#{token:=?TOKEN}}=Req) ->
+actor_req_authorize(#{auth:=#{token:=?TOKEN}}=Req) ->
     {true, Req};
 
-actor_authorize(_Req) ->
+actor_req_authorize(_Req) ->
     true.
 
 
