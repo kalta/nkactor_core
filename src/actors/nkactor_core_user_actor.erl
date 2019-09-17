@@ -89,7 +89,7 @@ config() ->
 
 
 %% @doc
-parse(_Verb, _Actor, Req) ->
+parse(_Op, _Actor, _Req) ->
     Fun = fun(Pass) ->
         StoredPass = store_pass(Pass),
         {ok, StoredPass}
@@ -99,7 +99,7 @@ parse(_Verb, _Actor, Req) ->
         member => binary,
         password => Fun
     },
-    {syntax, <<"v1a1">>, #{spec=>Spec}, Req}.
+    {syntax, <<"v1a1">>, #{spec=>Spec}}.
 
 
 %% @doc

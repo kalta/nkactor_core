@@ -67,7 +67,7 @@ config() ->
 
 %% @doc
 %% Valid for normal and CamelCase
-parse(_Verb, Actor, #{srv:=SrvId}=Req) ->
+parse(Op, Actor, #{srv:=SrvId}) ->
     Syntax = #{
         spec => #{
             name => binary,
@@ -136,7 +136,7 @@ parse(_Verb, Actor, #{srv:=SrvId}=Req) ->
             normalized_surname => binary
         }
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
+    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, Actor2} ->
             Data = maps:get(data, Actor2, #{}),
             Spec = maps:get(spec, Data, #{}),

@@ -59,22 +59,22 @@
     {ok, #actor_id{}, map()} | {error, term()}.
 
 op_get_spec(Id) ->
-    nkactor_srv:sync_op(Id, nkactor_get_spec).
+    nkactor:sync_op(Id, nkactor_get_spec).
 
 
 %% @doc
 op_get_direct_download_link(Id, ExternalId) ->
-    nkactor_srv:sync_op(Id, {nkactor_get_direct_download_link, ExternalId}).
+    nkactor:sync_op(Id, {nkactor_get_direct_download_link, ExternalId}).
 
 
 %% @doc
 op_get_upload_link(Id, CT) ->
-    nkactor_srv:sync_op(Id, {nkactor_get_upload_link, CT}).
+    nkactor:sync_op(Id, {nkactor_get_upload_link, CT}).
 
 
 %% @doc
 op_get_file_meta(Id, ExternalId) ->
-    nkactor_srv:sync_op(Id, {nkactor_get_file_meta, ExternalId}).
+    nkactor:sync_op(Id, {nkactor_get_file_meta, ExternalId}).
 
 
 %%
@@ -121,7 +121,7 @@ config() ->
 
 
 %% @doc
-parse(_Verb, Actor, Req) ->
+parse(Op, Actor, _Req) ->
     Syntax = #{
         spec => #{
             storage_class => {atom, [nkfile_filesystem, nkfile_s3]},
@@ -152,7 +152,7 @@ parse(_Verb, Actor, Req) ->
         },
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
+    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, #{data:=#{spec:=#{storage_class:=Class}=Spec2}}=Actor2} ->
             case Class of
                 nkfile_filesystem ->
@@ -186,7 +186,7 @@ request(Verb, <<"files/", Rest/binary>>, ActorId, Req) when Verb==create; Verb==
         params := Params#{provider => Path}
     },
     Req3 = maps:remove(name, Req2),
-    nkactor_request:request(Req3);
+    nkactor:request(Req3);
 
 request(get, <<"_rpc/upload_link">>, ActorId, #{params:=Params}) ->
     Syntax = #{content_type => binary},

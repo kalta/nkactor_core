@@ -210,7 +210,7 @@ req(Req) ->
         %namespace => ?NAMESPACE
     },
     Req2 = maps:merge(Base, Req),
-    {Action, Data, _Req2} = nkactor_request:request(Req2),
+    {Action, Data, _Req2} = nkactor:request(Req2),
     {Action, Data}.
 
 

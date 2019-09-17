@@ -39,18 +39,18 @@
 
 %% @doc
 op_get_body(Id) ->
-    nkactor_srv:sync_op(Id, nkactor_get_body, 60000).
+    nkactor:sync_op(Id, nkactor_get_body, 60000).
 
 
 %% @doc
 op_get_download_link(Id, ExtUrl) ->
-    nkactor_srv:sync_op(Id, {nkactor_get_download_link, ExtUrl}).
+    nkactor:sync_op(Id, {nkactor_get_download_link, ExtUrl}).
 
 
 op_get_media(Id) ->
     case nkactor:activate(Id) of
         {ok, #actor_id{group=?GROUP_CORE, resource=?RES_CORE_FILES}=ActorId, _} ->
-            nkactor_srv:sync_op(ActorId, nkactor_get_media);
+            nkactor:sync_op(ActorId, nkactor_get_media);
         {ok, _} ->
             {error, actor_not_found};
         {error, Error} ->
@@ -116,7 +116,7 @@ parse(create, Actor, Req) ->
         },
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
+    case nkactor_lib:parse_actor_data(create, Actor, <<"v1a1">>, Syntax) of
         {ok, Actor2} ->
             #{data:=#{spec:=Spec2}}=Actor2,
             Params = maps:get(params, Req, #{}),
@@ -127,7 +127,7 @@ parse(create, Actor, Req) ->
 
 %% We allow fields in case they didn't change
 %% fields_static makes sure no one is changed
-parse(update, _Actor, Req) ->
+parse(update, _Actor, _Req) ->
     Syntax = #{
         spec => #{
             content_type => binary,
@@ -139,7 +139,7 @@ parse(update, _Actor, Req) ->
         },
         '__mandatory' => [spec]
     },
-    {syntax, <<"v1a1">>, Syntax, Req}.
+    {syntax, <<"v1a1">>, Syntax}.
 
 
 %% @doc
@@ -184,7 +184,7 @@ request(upload, <<>>, _ActorId, #{params:=Params}=Req) ->
                         body := Body2,
                         subresource := <<>>
                     },
-                    nkactor_request:request(Req2);
+                    nkactor:request(Req2);
                 _ ->
                     {error, request_body_invalid}
             end;

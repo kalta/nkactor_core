@@ -55,7 +55,7 @@ config() ->
 
 
 %% @doc
-parse(_Verb, Actor, Req) ->
+parse(Op, Actor, _Req) ->
     Syntax = #{
         spec => #{
             class => binary,
@@ -63,7 +63,7 @@ parse(_Verb, Actor, Req) ->
             '__mandatory' => [class, id]
         }
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
+    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, Actor2} ->
             {ok, add_label(Actor2)};
         {error, Error} ->

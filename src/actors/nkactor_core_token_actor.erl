@@ -46,9 +46,9 @@ config() ->
 
 
 %% @doc
-parse(_Verb, Actor, Req) ->
+parse(Op, Actor, Req) ->
     Syntax = #{data => map},
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
+    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, #{metadata:=Meta2}=Actor2} ->
             case maps:is_key(expires_time, Meta2) of
                 true ->

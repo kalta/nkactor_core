@@ -45,7 +45,7 @@ config() ->
 
 
 %% @doc
-parse(_Verb, Actor, Req) ->
+parse(Op, Actor, _Req) ->
     Syntax = #{
         spec => #{
             ttl_secs => pos_integer,
@@ -54,7 +54,7 @@ parse(_Verb, Actor, Req) ->
         data => map,
         '__mandatory' => [spec]
     },
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
+    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, #{data:=Data2}=Actor2} ->
             #{spec:=#{ttl_secs:=Secs}} = Data2,
             Actor3 = nkactor_lib:maybe_set_ttl(Actor2, 1000*Secs),

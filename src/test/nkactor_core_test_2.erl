@@ -100,24 +100,24 @@ alarm_test() ->
     {ok, #{<<"items">>:=[]}} =
         kapi_req(#{verb=>list, resource=>users, params=>#{fieldSelector=>"metadata.inAlarm:true"}}),
     P = "core:users:ut1.b.a.test.my_actors",
-    {ok, []} = nkactor_srv:sync_op(P, get_alarms),
-    {error, {field_missing, <<"class">>}} = nkactor_srv:sync_op(P, {set_alarm, #{
+    {ok, []} = nkactor:sync_op(P, get_alarms),
+    {error, {field_missing, <<"class">>}} = nkactor:sync_op(P, {set_alarm, #{
         <<"code">> => <<"code1">>,
         <<"message">> => <<"message1">>,
         <<"meta">> => #{<<"a">> => 1}
     }}),
-    ok = nkactor_srv:sync_op(P, {set_alarm, #{
+    ok = nkactor:sync_op(P, {set_alarm, #{
         class => class1,
         <<"code">> => <<"code1">>,
         <<"message">> => <<"message1">>,
         <<"meta">> => #{<<"a">> => 1}
     }}),
-    ok = nkactor_srv:sync_op(P, {set_alarm, #{
+    ok = nkactor:sync_op(P, {set_alarm, #{
         class => class2,
         <<"code">> => <<"code2">>,
         <<"message">> => <<"message2">>
     }}),
-    ok = nkactor_srv:sync_op(P, {set_alarm, #{
+    ok = nkactor:sync_op(P, {set_alarm, #{
         class => class1,
         <<"code">> => <<"code3">>,
         <<"message">> => <<"message1">>,
@@ -137,7 +137,7 @@ alarm_test() ->
             last_time := <<"20", _/binary>>,
             message := <<"message2">>
         }
-    ]} = nkactor_srv:sync_op(P, get_alarms),
+    ]} = nkactor:sync_op(P, get_alarms),
 
     % Not yet saved
     {ok, #{<<"items">>:=[]}} = kapi_req(#{verb=>list, resource=>users, params=>#{deep=>true, fieldSelector=>"metadata.inAlarm:true"}}),
@@ -145,7 +145,7 @@ alarm_test() ->
     true = is_integer(Time),
 
     % Don't wait for automatic save
-    ok = nkactor_srv:async_op(P, save),
+    ok = nkactor:async_op(P, save),
     timer:sleep(50),
     {ok, #{<<"items">>:=[U1]}} =
         kapi_req(#{verb=>list, resource=>users, params=>#{deep=>true, fieldSelector=>"metadata.inAlarm:true"}}),
@@ -171,9 +171,9 @@ alarm_test() ->
     } = U1,
 
     % Clear
-    ok = nkactor_srv:async_op(P, clear_all_alarms),
+    ok = nkactor:async_op(P, clear_all_alarms),
     timer:sleep(50),
-    ok = nkactor_srv:async_op(P, save),
+    ok = nkactor:async_op(P, save),
     timer:sleep(50),
     {ok, #{<<"items">>:=[]}} =
         kapi_req(#{verb=>list, resource=>users, params=>#{deep=>true, fieldSelector=>"metadata.inAlarm:true"}}),
@@ -493,7 +493,7 @@ task_test() ->
     {created, T6} = kapi_req(#{verb=>create, resource=>tasks, body=>B1}),
     #{<<"metadata">> := #{<<"name">> := T6_Name}} = T6,
     ActorPath = <<"core:tasks:", T6_Name/binary, ".a.test.my_actors">>,
-    ok = nkactor_srv:sync_op(ActorPath, {update_state, #{task_status=>success}}),
+    ok = nkactor:sync_op(ActorPath, {update_state, #{task_status=>success}}),
     timer:sleep(150),
     {error, actor_not_found} = nkactor:get_actor(ActorPath),
 %%    nknamespace_api_events:wait_for_save(),
@@ -631,13 +631,13 @@ session_test() ->
 
     timer:sleep(1000),
     P = "core:sessions:s1.a.test.my_actors",
-    {ok, {expires, Time1}} = nkactor_srv:sync_op(P, get_unload_policy),
+    {ok, {expires, Time1}} = nkactor:sync_op(P, get_unload_policy),
     true = (Time1 - nklib_date:epoch(msecs)) < 1000,
 
     {status, #{<<"reason">>:= <<"actor_updated">>}} =
         kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"sessions", name=>s1, subresource=><<"_rpc/refresh">>}),
 
-    {ok, {expires, Time2}} = nkactor_srv:sync_op(P, get_unload_policy),
+    {ok, {expires, Time2}} = nkactor:sync_op(P, get_unload_policy),
     true = (Time2 - nklib_date:epoch(msecs)) > 1500,
 
     timer:sleep(2100),

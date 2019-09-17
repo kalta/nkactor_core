@@ -70,7 +70,7 @@ config() ->
 
 
 %% @doc
-parse(_Verb, Actor, Req) ->
+parse(Op, Actor, _Req) ->
     Syntax = #{
         spec => #{
             job => map,
@@ -92,7 +92,7 @@ parse(_Verb, Actor, Req) ->
         '__mandatory' => [spec]
     },
     % Set expires_time based on max_secs
-    case nkactor_lib:parse_actor_data(Actor, <<"v1a1">>, Syntax, Req) of
+    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, #{data:=#{spec:=Spec}}=Actor2} ->
             #{max_secs:=MaxSecs} = Spec,
             % If no expires yet, we set it

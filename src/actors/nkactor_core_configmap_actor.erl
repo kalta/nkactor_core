@@ -44,6 +44,6 @@ config() ->
 
 
 %% @doc
-parse(_Verb, _Actor, Req) ->
-    {syntax, <<"v1a1">>, #{data => map}, Req}.
+parse(_Op, _Actor, _Req) ->
+    {syntax, <<"v1a1">>, #{data => map}}.
 
