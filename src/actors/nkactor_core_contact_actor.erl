@@ -24,10 +24,10 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3]).
+-export([config/0, parse/3, init/2, update/2]).
 
 -include("nkactor_core.hrl").
-
+-include_lib("nkactor/include/nkactor.hrl").
 
 
 
@@ -67,7 +67,7 @@ config() ->
 
 %% @doc
 %% Valid for normal and CamelCase
-parse(Op, Actor, #{srv:=SrvId}) ->
+parse(Op, Actor, _Req) ->
     Syntax = #{
         spec => #{
             name => binary,
@@ -148,11 +148,33 @@ parse(Op, Actor, #{srv:=SrvId}) ->
                 normalized_surname => nklib_parse:normalize(SurName)
             },
             Actor3 = Actor2#{data=>Data#{status=>Status2}},
-            add_user_link(SrvId, Actor3);
+            {ok, Actor3};
         {error, Error} ->
             {error, Error}
     end.
 
+
+%% @doc
+init(create, #actor_st{actor=Actor}=ActorSt) ->
+    case add_user_link(Actor) of
+        {ok, Actor2} ->
+            {ok, ActorSt#actor_st{actor=Actor2}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
+init(start, ActorSt) ->
+    {ok, ActorSt}.
+
+
+%% @doc
+update(Actor, ActorSt) ->
+    case add_user_link(Actor) of
+        {ok, Actor2} ->
+            {ok, Actor2, ActorSt};
+        {error, Error} ->
+            {error, Error, ActorSt}
+    end.
 
 
 %% ===================================================================
@@ -161,13 +183,13 @@ parse(Op, Actor, #{srv:=SrvId}) ->
 
 
 %% @private
-add_user_link(_SrvId, Actor) ->
-    Actor2 = nkactor_lib:rm_links(?GROUP_CORE, ?RES_CORE_USERS, Actor),
+add_user_link(Actor) ->
+    Actor2 = nkactor_lib:rm_links(?GROUP_CORE, ?LINK_CORE_CONTACT_USER, Actor),
     case Actor2 of
         #{data:=#{spec:=#{user:=UserId}}} ->
-            case nkactor_lib:add_checked_link(UserId, ?GROUP_CORE, ?RES_CORE_USERS, Actor) of
-                {ok, _, Actor2} ->
-                    {ok, Actor2};
+            case nkactor_lib:add_checked_link(UserId, ?GROUP_CORE, ?RES_CORE_USERS, Actor2, ?LINK_CORE_CONTACT_USER) of
+                {ok, _, Actor3} ->
+                    {ok, Actor3};
                 {error, Error} ->
                     {error, Error}
             end;

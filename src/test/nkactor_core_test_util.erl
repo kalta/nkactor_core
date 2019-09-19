@@ -235,13 +235,13 @@ kapi_req(Req) ->
             Req2;
         #{namespace:=_} ->
             Req2;
-        #{body:=#{namespace:=_}} ->
+        #{body:=#{<<"metadata">>:=#{<<"namespace">>:=_}}} ->
             Req2;
         _ ->
             Req2#{namespace => ?NAMESPACE}
 
     end,
-    {Action, Data, _Req2} = nkactor_kapi:request(Req3),
+    {Action, Data, _Req2} = nkactor_kapi:request(?ACTOR_SRV, Req3),
     {Action, Data}.
 
 
@@ -326,7 +326,6 @@ http_search(Namespace, Spec) ->
         get_metadata => true
     },
     Body = nklib_json:encode(Spec2),
-    lager:error("NKLOG P1 ~p", [Path]),
     case httpc:request(post, {Path, http_auth_header(), "application/json", Body}, [], []) of
         {ok, {{_, 200, _}, _Hds, List}} ->
             #{<<"items">>:=Items, <<"total">>:=Total, <<"size">>:=Size} = nklib_json:decode(List),

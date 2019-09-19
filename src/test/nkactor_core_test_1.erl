@@ -32,7 +32,7 @@
 -compile(nowarn_export_all).
 
 -include_lib("nkactor/include/nkactor.hrl").
-
+-include("nkactor_core.hrl").
 -define(ACTOR_SRV, test_actors).
 
 %% ===================================================================
@@ -555,63 +555,63 @@ list_test_2() ->
 
 search_test() ->
     % No apiVersion or kind, gets all objects but no special fields
-%%    {400, #{<<"reason">>:=<<"field_invalid">>}} =
-%%        http_search("test.my_actors", #{filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
-%%
-%%    Opts1 = #{
-%%        deep => true,
-%%        filter => #{
-%%            'and' => [#{field=>kind, op=>values, value=>['ConfigMap', 'User']}]
-%%        },
-%%        sort=>[
-%%            #{field=>kind, order=>asc},
-%%            #{field=>'metadata.updateTime', order=>desc}
-%%        ]
-%%    },
-%%    {4, 4, List1} = http_search("test.my_actors", Opts1),
-%%    [
-%%        #{
-%%            <<"apiVersion">> := <<"core/v1a1">>,
-%%            <<"kind">> := <<"ConfigMap">>,
-%%            <<"metadata">> := #{
-%%                <<"namespace">> := <<"c.b.a.test.my_actors">>,
-%%                <<"name">> := <<"cc">>
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"ConfigMap">>,
-%%            <<"metadata">> := #{
-%%                <<"namespace">> := <<"b.a.test.my_actors">>,
-%%                <<"name">> := <<"cb">>
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"ConfigMap">>,
-%%            <<"metadata">> := #{
-%%                <<"namespace">> := <<"a.test.my_actors">>,
-%%                <<"name">> := <<"ca">>,
-%%                <<"uid">> := CA_UID
-%%            }
-%%        },
-%%        #{
-%%            <<"kind">> := <<"User">>,
-%%            <<"spec">> := #{
-%%                <<"password">> := <<>>
-%%            },
-%%            <<"metadata">> := #{
-%%                <<"namespace">> := <<"b.a.test.my_actors">>,
-%%                <<"name">> := <<"ut1">>
-%%
-%%            }
-%%        }
-%%    ] = List1,
+    {400, #{<<"reason">>:=<<"field_invalid">>}} =
+        http_search("test.my_actors", #{filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
+
+    Opts1 = #{
+        deep => true,
+        filter => #{
+            'and' => [#{field=>kind, op=>values, value=>['ConfigMap', 'User']}]
+        },
+        sort=>[
+            #{field=>kind, order=>asc},
+            #{field=>'metadata.updateTime', order=>desc}
+        ]
+    },
+    {4, 4, List1} = http_search("test.my_actors", Opts1),
+    [
+        #{
+            <<"apiVersion">> := <<"core/v1a1">>,
+            <<"kind">> := <<"ConfigMap">>,
+            <<"metadata">> := #{
+                <<"namespace">> := <<"c.b.a.test.my_actors">>,
+                <<"name">> := <<"cc">>
+            }
+        },
+        #{
+            <<"kind">> := <<"ConfigMap">>,
+            <<"metadata">> := #{
+                <<"namespace">> := <<"b.a.test.my_actors">>,
+                <<"name">> := <<"cb">>
+            }
+        },
+        #{
+            <<"kind">> := <<"ConfigMap">>,
+            <<"metadata">> := #{
+                <<"namespace">> := <<"a.test.my_actors">>,
+                <<"name">> := <<"ca">>,
+                <<"uid">> := CA_UID
+            }
+        },
+        #{
+            <<"kind">> := <<"User">>,
+            <<"spec">> := #{
+                <<"password">> := <<>>
+            },
+            <<"metadata">> := #{
+                <<"namespace">> := <<"b.a.test.my_actors">>,
+                <<"name">> := <<"ut1">>
+
+            }
+        }
+    ] = List1,
 
     {409, #{<<"reason">>:=<<"service_not_found">>}} =
         http_search("root", #{apiVersion=>core, filter=>#{'and'=>[#{field=>name, value=><<>>}]}}),
 
-%%    % apiVersion but no kind.
-%%    {400, #{<<"reason">>:=<<"field_invalid">>}} =
-%%        http_search("test.my_actors", #{apiVersion=>core, filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
+    % apiVersion but no kind.
+    {400, #{<<"reason">>:=<<"field_invalid">>}} =
+        http_search("test.my_actors", #{apiVersion=>core, filter=>#{'and'=>[#{field=>reason, value=><<>>}]}}),
 
 
 %%%%    Opts2 = #{
@@ -656,110 +656,110 @@ search_test() ->
 %%%%    ] = List2,
 
 
-%%    % kind and no apiVersion
-%%    {400, #{<<"message">>:=<<"Field 'apiVersion' is missing">>}} = http_search("test.my_actors", #{kind=>'User'}),
-%%
-%%    % kind and apiVersion, so we can use specific fields
-%%    Opts3 = #{
-%%        apiVersion => core,
-%%        kind => 'User',
-%%        deep => true
-%%    },
-%%    {1, 1, List3} = http_search("test.my_actors", Opts3),
-%%    [
-%%        #{
-%%            <<"kind">> := <<"User">>,
-%%            <<"spec">> := #{
-%%                <<"password">> := <<>>
-%%            },
-%%            <<"metadata">> := #{
-%%                <<"namespace">> := <<"b.a.test.my_actors">>,
-%%                <<"name">> := <<"ut1">>
-%%
-%%            }
-%%        }
-%%    ] = List3,
-%%
-%%    % labels
-%%    OptsL1 = #{
-%%        filter => #{'and' => [
-%%            #{field=>'kind', value=>'ConfigMap'},
-%%            #{field=>'metadata.labels.is_b', op=>exists, value=>true}
-%%        ]},
-%%        sort => [#{field=>'metadata.updateTime', order=>desc}]
-%%    },
-%%    {0, 0, []} = http_search("test.my_actors", OptsL1),
-%%
-%%    {2, 2, [#{<<"metadata">>:=#{<<"name">>:=<<"cc">>}}=C, #{<<"metadata">>:=#{<<"name">>:=<<"cb">>}}=B]} =
-%%        http_search("test.my_actors", OptsL1#{deep=>true}),  % B and C
-%%
-%%    % we can also filter using apiVersion and kind
-%%    OptsL2 = fun(V) ->
-%%        #{
-%%            apiVersion => core,
-%%            kind => 'ConfigMap',
-%%            deep => true,
-%%            filter => #{'and' => [
-%%                #{field=>'metadata.labels.is_b', op=>eq, value=>V}
-%%            ]},
-%%            sort => [#{field=>'metadata.updateTime', order=>asc}]
-%%        }
-%%    end,
-%%    {2, 2, [B, C]} = http_search("test.my_actors", OptsL2(<<"true">>)),
-%%    {0, 0, []} = http_search("test.my_actors", OptsL2(<<"true1">>)),
-%%
-%%    % links
-%%    OptsI1 = #{
-%%        filter => #{'and' => [
-%%            #{field=>'kind', value=>'ConfigMap'},
-%%            #{field=><<"metadata.links.", CA_UID/binary>>, op=>exists, value=>true}
-%%        ]}
-%%    },
-%%    {0, 0, []} = http_search("test.my_actors", OptsI1),
-%%    {1, 1, [B]} = http_search("b.a.test.my_actors", OptsI1),
-%%
-%%
-%%    % FTS
-%%    OptsF1 = fun(D, F, Op, V) ->
-%%        #{
-%%            deep => D,
-%%            filter => #{'and' => [
-%%                #{field=>'kind', value=>'ConfigMap'},
-%%                #{field=>F, op=>Op, value=>V}
-%%            ]},
-%%            sort => [#{field=>'metadata.updateTime', order=>desc}]
-%%        }
-%%    end,
-%%    {0, 0, []} = http_search("test.my_actors", OptsF1(false, 'metadata.fts.*', eq, <<"Domaín"/utf8>>)),
-%%    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', eq, <<"Domaín"/utf8>>)),
-%%    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', eq, <<"domain">>)),
-%%    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', prefix, <<"dOm">>)),
-%%    {1, 1, [B]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
-%%
-%%    OptsF2 = fun(D, F, Op, V) ->
-%%        #{
-%%            deep => D,
-%%            apiVersion => core,
-%%            kind => 'User',
-%%            filter => #{'and' => [
-%%                #{field=>F, op=>Op, value=>V}
-%%            ]},
-%%            sort => [#{field=>'metadata.updateTime', order=>desc}]
-%%        }
-%%    end,
-%%    {0, 0, []} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
-%%    {0, 0, []} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
-%%    {1, 1, [#{<<"metadata">>:=#{<<"name">>:=<<"ut1">>}}=U1]} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.*', eq, <<"my">>)),
-%%
-%%    % delete
-%%    OptsD1 = #{
-%%        apiVersion => core,
-%%        kind => 'User'
-%%    },
-%%    {1, 1, [U1]} = http_search("b.a.test.my_actors", OptsD1),
-%%    {200, #{<<"deleted">>:=1}} = http_search_delete("b.a.test.my_actors", OptsD1),
-%%    {200, #{<<"deleted">>:=0}} = http_search_delete("b.a.test.my_actors", OptsD1),
-%%    {0, 0, []} = http_search("b.a.test.my_actors", OptsD1),
+    % kind and no apiVersion
+    {400, #{<<"message">>:=<<"Field 'apiVersion' is missing">>}} = http_search("test.my_actors", #{kind=>'User'}),
+
+    % kind and apiVersion, so we can use specific fields
+    Opts3 = #{
+        apiVersion => core,
+        kind => 'User',
+        deep => true
+    },
+    {1, 1, List3} = http_search("test.my_actors", Opts3),
+    [
+        #{
+            <<"kind">> := <<"User">>,
+            <<"spec">> := #{
+                <<"password">> := <<>>
+            },
+            <<"metadata">> := #{
+                <<"namespace">> := <<"b.a.test.my_actors">>,
+                <<"name">> := <<"ut1">>
+
+            }
+        }
+    ] = List3,
+
+    % labels
+    OptsL1 = #{
+        filter => #{'and' => [
+            #{field=>'kind', value=>'ConfigMap'},
+            #{field=>'metadata.labels.is_b', op=>exists, value=>true}
+        ]},
+        sort => [#{field=>'metadata.updateTime', order=>desc}]
+    },
+    {0, 0, []} = http_search("test.my_actors", OptsL1),
+
+    {2, 2, [#{<<"metadata">>:=#{<<"name">>:=<<"cc">>}}=C, #{<<"metadata">>:=#{<<"name">>:=<<"cb">>}}=B]} =
+        http_search("test.my_actors", OptsL1#{deep=>true}),  % B and C
+
+    % we can also filter using apiVersion and kind
+    OptsL2 = fun(V) ->
+        #{
+            apiVersion => core,
+            kind => 'ConfigMap',
+            deep => true,
+            filter => #{'and' => [
+                #{field=>'metadata.labels.is_b', op=>eq, value=>V}
+            ]},
+            sort => [#{field=>'metadata.updateTime', order=>asc}]
+        }
+    end,
+    {2, 2, [B, C]} = http_search("test.my_actors", OptsL2(<<"true">>)),
+    {0, 0, []} = http_search("test.my_actors", OptsL2(<<"true1">>)),
+
+    % links
+    OptsI1 = #{
+        filter => #{'and' => [
+            #{field=>'kind', value=>'ConfigMap'},
+            #{field=><<"metadata.links.", CA_UID/binary>>, op=>exists, value=>true}
+        ]}
+    },
+    {0, 0, []} = http_search("test.my_actors", OptsI1),
+    {1, 1, [B]} = http_search("b.a.test.my_actors", OptsI1),
+
+
+    % FTS
+    OptsF1 = fun(D, F, Op, V) ->
+        #{
+            deep => D,
+            filter => #{'and' => [
+                #{field=>'kind', value=>'ConfigMap'},
+                #{field=>F, op=>Op, value=>V}
+            ]},
+            sort => [#{field=>'metadata.updateTime', order=>desc}]
+        }
+    end,
+    {0, 0, []} = http_search("test.my_actors", OptsF1(false, 'metadata.fts.*', eq, <<"Domaín"/utf8>>)),
+    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', eq, <<"Domaín"/utf8>>)),
+    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', eq, <<"domain">>)),
+    {3, 3, [C,B,A]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.*', prefix, <<"dOm">>)),
+    {1, 1, [B]} = http_search("test.my_actors", OptsF1(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
+
+    OptsF2 = fun(D, F, Op, V) ->
+        #{
+            deep => D,
+            apiVersion => core,
+            kind => 'User',
+            filter => #{'and' => [
+                #{field=>F, op=>Op, value=>V}
+            ]},
+            sort => [#{field=>'metadata.updateTime', order=>desc}]
+        }
+    end,
+    {0, 0, []} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
+    {0, 0, []} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.fts_class', prefix, <<"b">>)),
+    {1, 1, [#{<<"metadata">>:=#{<<"name">>:=<<"ut1">>}}=U1]} = http_search("test.my_actors", OptsF2(true, 'metadata.fts.*', eq, <<"my">>)),
+
+    % delete
+    OptsD1 = #{
+        apiVersion => core,
+        kind => 'User'
+    },
+    {1, 1, [U1]} = http_search("b.a.test.my_actors", OptsD1),
+    {200, #{<<"deleted">>:=1}} = http_search_delete("b.a.test.my_actors", OptsD1),
+    {200, #{<<"deleted">>:=0}} = http_search_delete("b.a.test.my_actors", OptsD1),
+    {0, 0, []} = http_search("b.a.test.my_actors", OptsD1),
     ok.
 
 
@@ -834,7 +834,7 @@ contact_test() ->
             <<"surname">> := <<"My Surname">>,
             <<"birthTime">> := <<"2018-01-01T00:00:00Z">>,
             <<"gender">> := <<"M">>,
-            <<"timezone">> := -1,
+            <<"timezone">> := <<"-1">>,
             <<"url">> := [
                 #{<<"url">> := <<"url1">>},
                 #{
@@ -908,7 +908,7 @@ contact_test() ->
             <<"resourceVersion">> := Rs1,
 %%            %<<"selfLink">> := <<"/apis/core/v1a1/namespaces/c.b.a.test.my_actors/contacts/ct1">>,
             <<"links">> := #{
-                UT1_UID := <<"io.netk.core.users">>
+                UT1_UID := ?LINK_CORE_CONTACT_USER
             },
             <<"fts">> := #{
                 <<"fullName">> := <<"My Náme My Surname"/utf8>>
@@ -917,46 +917,46 @@ contact_test() ->
         }
     } = CT1,
 
-    {error, #{<<"reason">>:= <<"uniqueness_violation">>}} = kapi_req(#{verb=>create, body=>Body2}),
-
-    Spec2 = maps:remove(<<"im">>, Spec1),
-    Body3 = maps:remove(<<"status">>, CT1#{<<"spec">>:=Spec2}),
-    {ok, CT2} = kapi_req(#{verb=>update, body=>Body3}),
-    #{
-        <<"spec">> := Spec2,
-        <<"metadata">> := #{
-            <<"uid">> := C1_UID,
-            <<"creationTime">> := T1,
-            <<"updateTime">> := T2,
-            <<"generation">> := 1,
-            <<"resourceVersion">> := Rs2
-        }
-    } = CT2,
-    true = Rs1 /= Rs2,
-    true = T2 > T1,
-
-    {error, #{<<"message">>:= <<"Field 'apiVersion' is invalid">>}} = kapi_req(#{verb=>update, group=>core2, body=>Body2}),
-    {error, #{<<"message">>:= <<"Field 'resource' is invalid">>}} = kapi_req(#{verb=>update, resource=>users, body=>Body2}),
-    {error, #{<<"message">>:= <<"Field 'metadata.name' is invalid">>}} = kapi_req(#{verb=>update, name=>name2, body=>Body2}),
-    {error, #{<<"message">>:= <<"Field 'metadata.namespace' is invalid">>}} = kapi_req(#{verb=>update, namespace=>"a-nktest", body=>Body2}),
-    {ok, _} = kapi_req(#{verb=>update, namespace=>"c.b.a.test.my_actors", resource=>"contacts", name=>"ct1", body=>Body2}),
-
-    {1, 1, [#{<<"metadata">>:=#{<<"uid">>:=C1_UID}}=CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":io.netk.core.users"),
-    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":1"),
-    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M&sort=spec.timezone"),
-    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:F"),
-    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2007"),
-    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2020"),
-
-    {422, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
-
-    % Remove link
-    Body4 = maps:remove(<<"status">>, CT1#{<<"spec">>:=maps:remove(<<"user">>, Spec1)}),
-
-    {ok, _} = kapi_req(#{verb=>update, resource=>"contacts", name=>"ct1", body=>Body4}),
-    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo=user:"++binary_to_list(UT1_UID)),
-    {200, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
-    {error, #{<<"reason">>:=<<"linked_actor_unknown">>}} = kapi_req(#{verb=>create, body=>Body2}),
+%%    {error, #{<<"reason">>:= <<"uniqueness_violation">>}} = kapi_req(#{verb=>create, body=>Body2}),
+%%
+%%    Spec2 = maps:remove(<<"im">>, Spec1),
+%%    Body3 = maps:remove(<<"status">>, CT1#{<<"spec">>:=Spec2}),
+%%    {ok, CT2} = kapi_req(#{verb=>update, body=>Body3}),
+%%    #{
+%%        <<"spec">> := Spec2,
+%%        <<"metadata">> := #{
+%%            <<"uid">> := C1_UID,
+%%            <<"creationTime">> := T1,
+%%            <<"updateTime">> := T2,
+%%            <<"generation">> := 1,
+%%            <<"resourceVersion">> := Rs2
+%%        }
+%%    } = CT2,
+%%    true = Rs1 /= Rs2,
+%%    true = T2 > T1,
+%%
+%%    {error, #{<<"message">>:= <<"Field 'apiVersion' is invalid">>}} = kapi_req(#{verb=>update, group=>core2, body=>Body2}),
+%%    {error, #{<<"message">>:= <<"Field 'resource' is invalid">>}} = kapi_req(#{verb=>update, resource=>users, body=>Body2}),
+%%    {error, #{<<"message">>:= <<"Field 'metadata.name' is invalid">>}} = kapi_req(#{verb=>update, name=>name2, body=>Body2}),
+%%    {error, #{<<"message">>:= <<"Field 'metadata.namespace' is invalid">>}} = kapi_req(#{verb=>update, namespace=>"a-nktest", body=>Body2}),
+%%    {ok, _} = kapi_req(#{verb=>update, namespace=>"c.b.a.test.my_actors", resource=>"contacts", name=>"ct1", body=>Body2}),
+%%
+%%    {1, 1, [#{<<"metadata">>:=#{<<"uid">>:=C1_UID}}=CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":io.netk.core.users"),
+%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":1"),
+%%    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M&sort=spec.timezone"),
+%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:F"),
+%%    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2007"),
+%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2020"),
+%%
+%%    {422, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
+%%
+%%    % Remove link
+%%    Body4 = maps:remove(<<"status">>, CT1#{<<"spec">>:=maps:remove(<<"user">>, Spec1)}),
+%%
+%%    {ok, _} = kapi_req(#{verb=>update, resource=>"contacts", name=>"ct1", body=>Body4}),
+%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo=user:"++binary_to_list(UT1_UID)),
+%%    {200, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
+%%    {error, #{<<"reason">>:=<<"linked_actor_unknown">>}} = kapi_req(#{verb=>create, body=>Body2}),
     {200, _} = http_delete("/namespaces/c.b.a.test.my_actors/contacts/ct1"),
     ok.
 %%
