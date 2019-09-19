@@ -204,25 +204,44 @@ test_data() ->
 
 req(Req) ->
     Base = #{
-        srv => ?ACTOR_SRV,          % We will update later if different
         group => ?GROUP_CORE,
         auth => #{token=>?TOKEN}
-        %namespace => ?NAMESPACE
     },
     Req2 = maps:merge(Base, Req),
-    {Action, Data, _Req2} = nkactor:request(Req2),
+    Req3 = case Req of
+        #{uid:=_} ->
+            Req2;
+        #{namespace:=_} ->
+            Req2;
+        #{body:=#{namespace:=_}} ->
+            Req2;
+        _ ->
+            Req2#{namespace => ?NAMESPACE}
+
+    end,
+    {Action, Data, _Req2} = nkactor:request(Req3),
     {Action, Data}.
 
 
 kapi_req(Req) ->
     Base = #{
-        srv => ?ACTOR_SRV,          % We will update later if different
         group => ?GROUP_CORE,
         vsn => <<"v1a1">>,
         auth => #{token=>?TOKEN}
     },
     Req2 = maps:merge(Base, Req),
-    {Action, Data, _Req2} = nkactor_kapi:request(Req2),
+    Req3 = case Req of
+        #{uid:=_} ->
+            Req2;
+        #{namespace:=_} ->
+            Req2;
+        #{body:=#{namespace:=_}} ->
+            Req2;
+        _ ->
+            Req2#{namespace => ?NAMESPACE}
+
+    end,
+    {Action, Data, _Req2} = nkactor_kapi:request(Req3),
     {Action, Data}.
 
 
@@ -307,6 +326,7 @@ http_search(Namespace, Spec) ->
         get_metadata => true
     },
     Body = nklib_json:encode(Spec2),
+    lager:error("NKLOG P1 ~p", [Path]),
     case httpc:request(post, {Path, http_auth_header(), "application/json", Body}, [], []) of
         {ok, {{_, 200, _}, _Hds, List}} ->
             #{<<"items">>:=Items, <<"total">>:=Total, <<"size">>:=Size} = nklib_json:decode(List),

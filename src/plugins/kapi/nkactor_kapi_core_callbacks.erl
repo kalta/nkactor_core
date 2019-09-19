@@ -92,7 +92,6 @@ actor_kapi_fields_trans(Map) ->
     {continue, [Map2]}.
 
 
-
 %% @doc
 actor_kapi_pre_request(update, ?GROUP_CORE, ?RES_CORE_TASKS, <<"_state">>, #{body:=Actor}=Req)
     when is_map(Actor)->
