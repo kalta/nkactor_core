@@ -76,7 +76,7 @@ config() ->
         resource => ?RES_CORE_FILES,
         group => ?GROUP_CORE,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update, watch, upload],
+        verbs => [create, delete, deletecollection, get, list, update, upload],
         fields_filter => [
             'spec.name',
             'spec.size',

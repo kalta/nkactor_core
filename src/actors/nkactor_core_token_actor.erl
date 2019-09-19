@@ -41,7 +41,7 @@ config() ->
     #{
         resource => ?RES_CORE_TOKENS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update, watch]
+        verbs => [create, delete, deletecollection, get, list, update]
     }.
 
 

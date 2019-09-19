@@ -53,7 +53,7 @@ config() ->
     #{
         resource => ?RES_CORE_TASKS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update],
         auto_activate => true,
         fields_filter => [
             'status.last_try_start_time',

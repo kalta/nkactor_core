@@ -38,7 +38,7 @@ config() ->
     #{
         resource => ?RES_CORE_CONFIGMAPS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update],
         camel => <<"ConfigMap">>
     }.
 

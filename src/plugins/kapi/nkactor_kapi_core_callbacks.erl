@@ -270,6 +270,16 @@ actor_kapi_unparse(?GROUP_CORE, ?RES_CORE_CONTACTS) ->
         }
     };
 
+actor_kapi_unparse(?GROUP_CORE, ?RES_CORE_ACCESS_IDS) ->
+    #{
+        data => #{
+            spec => {'__key', <<"spec">>, #{
+                class => {'__key', <<"class">>},
+                id => {'__key', <<"id">>}
+            }}
+        }
+    };
+
 actor_kapi_unparse(?GROUP_CORE, ?RES_CORE_TASKS) ->
     #{
         data => #{

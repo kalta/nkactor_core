@@ -40,7 +40,7 @@ config() ->
     #{
         resource => ?RES_CORE_CONTACTS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update],
         short_names => [ct],
         fields_filter => [
             'spec.name',

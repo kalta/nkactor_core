@@ -18,17 +18,17 @@
 %% -------------------------------------------------------------------
 
 %% @doc NkActor Access Id Actor
+%% It generates a label for the field 'id'
 -module(nkactor_core_access_id_actor).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -behavior(nkactor_actor).
 
--export([find_id/3]).
--export([config/0, parse/3, update/2]).
+-export([find_id/4]).
+-export([config/0, parse/3, init/2, update/2]).
 
 -include("nkactor_core.hrl").
-
--define(LABEL_ID, <<"id.netc.io">>).
+-include_lib("nkactor/include/nkactor.hrl").
 
 
 
@@ -36,8 +36,11 @@
 %% API
 %% ===================================================================
 
-find_id(SrvId, Class, Id) ->
-    nkactor:find_label(SrvId, make_label_key(Class), Id).
+-spec find_id(nkserver:id(), nkactor:namespace(), binary(), binary()) ->
+    {ok, #actor_id{}} | {error, term()}.
+
+find_id(SrvId, Namespace, Class, Id) ->
+    nkactor:find_label(SrvId, Namespace, make_label_key(Class), Id).
 
 
 %% ===================================================================
@@ -50,34 +53,36 @@ config() ->
         resource => ?RES_CORE_ACCESS_IDS,
         versions => [<<"v1a1">>],
         camel => <<"AccessId">>,
-        verbs => [create, delete, deletecollection, get, list, update, watch]
+        verbs => [create, delete, deletecollection, get, list, update]
     }.
 
 
 %% @doc
-parse(Op, Actor, _Req) ->
+parse(_Op, Actor, _Req) ->
     Syntax = #{
         spec => #{
             class => binary,
             id => binary,
             '__mandatory' => [class, id]
-        }
+        },
+        '__mandatory' => spec
     },
-    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
-        {ok, Actor2} ->
-            {ok, add_label(Actor2)};
-        {error, Error} ->
-            {error, Error}
-    end.
+    {syntax, <<"v1a1">>, Syntax, Actor}.
 
 
 %% @doc
-update(Actor, State) ->
-    Actor2 = nkactor_lib:rm_label_re(?LABEL_ID, Actor),
-    Actor3 = add_label(Actor2),
-    {ok, Actor3, State}.
+init(create, #actor_st{actor=Actor}=ActorSt) ->
+    Actor2 = add_label(Actor),
+    {ok, ActorSt#actor_st{actor = Actor2}};
+
+init(start, ActorSt) ->
+    {ok, ActorSt}.
 
 
+%% @doc
+update(Actor, ActorSt) ->
+    Actor2 = add_label(Actor),
+    {ok, Actor2, ActorSt}.
 
 
 %% ===================================================================
@@ -86,8 +91,11 @@ update(Actor, State) ->
 
 %% @private
 add_label(#{data:=#{spec:=#{class:=Class, id:=Id}}}=Actor) ->
-    nkactor_lib:add_label(make_label_key(Class), Id, Actor).
+    Actor2 = nkactor_lib:rm_label_re(?LABEL_ACCESS_ID, Actor),
+    nkactor_lib:add_label(make_label_key(Class), Id, Actor2).
+
 
 %% @private
 make_label_key(Class) ->
-    <<Class/binary, $., ?LABEL_ID/binary>>.
+    Class2 = nklib_util:to_binary(Class),
+    <<?LABEL_ACCESS_ID/binary, $-, Class2/binary>>.

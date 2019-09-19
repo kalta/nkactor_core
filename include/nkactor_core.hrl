@@ -27,7 +27,6 @@
 %-define(LINK_CORE_FILE_PROVIDER, <<"file-provider">>).
 -define(LINK_CORE_CONTACT_USER, <<"user-contacts.netc.io">>).
 
-
-
+-define(LABEL_ACCESS_ID, <<"id-access_ids.netc.io">>).
 
 -endif.

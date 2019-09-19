@@ -73,7 +73,7 @@ config() ->
     #{
         resource => ?RES_CORE_USERS,
         versions => [<<"0">>],
-        verbs => [create, delete, deletecollection, get, list, update, watch],
+        verbs => [create, delete, deletecollection, get, list, update],
         short_names => [u],
         fields_filter => [
             'spec.login',

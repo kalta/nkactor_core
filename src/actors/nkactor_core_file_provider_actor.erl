@@ -99,7 +99,7 @@ config() ->
     #{
         resource => ?RES_CORE_FILE_PROVIDERS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update, watch, upload],
+        verbs => [create, delete, deletecollection, get, list, update, upload],
         short_names => [],
         camel => <<"FileProvider">>,
         permanent => true,

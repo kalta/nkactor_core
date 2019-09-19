@@ -30,6 +30,7 @@
 -compile(export_all).
 -compile(nowarn_export_all).
 
+-include("nkactor_core.hrl").
 -include_lib("nkactor/include/nkactor.hrl").
 
 -define(ACTOR_SRV, test_actors).
@@ -57,28 +58,35 @@ all_tests() ->
 
 access_id_test() ->
     kapi_req(#{verb=>delete, namespace=>"a.test.my_actors", resource=>accessids, name=>id1}),
+    kapi_req(#{verb=>delete, namespace=>"b.a.test.my_actors", resource=>accessids, name=>id2}),
 
     B1 = yaml(<<"
-        data:
-            key2: val2
+        spec:
+            class: test1
+            id: id2
         metadata:
             subtype: TestType
             namespace: a.test.my_actors
             annotations:
                 ann1: value1
     ">>),
+    {error, #{<<"reason">>:=<<"parameter_invalid">>}} = kapi_req(#{verb=>create, resource=>accessids, name=>id1, body=>B1, params=>#{ttl2=>2}}),
     {created, ID1} = kapi_req(#{verb=>create, resource=>accessids, name=>id1, body=>B1, params=>#{ttl=>2}}),
     #{
         <<"apiVersion">> := <<"core/v1a1">>,
         <<"kind">> := <<"AccessId">>,
-        <<"data">> := #{
-            <<"key2">> := <<"val2">>
+        <<"spec">> := #{
+            <<"class">> := <<"test1">>,
+            <<"id">> := <<"id2">>
         },
         <<"metadata">> := #{
             <<"subtype">> := <<"TestType">>,
             <<"namespace">> := <<"a.test.my_actors">>,
             <<"uid">> := ID1_UID,
             <<"name">> := <<"id1">>,
+            <<"labels">> := #{
+              <<?LABEL_ACCESS_ID/binary, "-test1">> := <<"id2">>
+            },
             <<"annotations">> := #{
                 <<"ann1">> := <<"value1">>
             }
@@ -92,6 +100,78 @@ access_id_test() ->
     {ok, #actor_id{pid=undefined}} = nkactor:find(ID1_UID),
     {ok, ID2} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>accessids, name=>id1, params=>#{activate=>false}}),
     {ok, #actor_id{pid=undefined}} = nkactor:find(ID1_UID),
+
+    % Update
+    B2 = yaml(<<"
+        spec:
+            class: test3
+            id: id3
+    ">>),
+    {ok, ID3} = kapi_req(#{verb=>update, namespace=>"a.test.my_actors", resource=>accessids, name=>id1, body=>B2}),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"AccessId">>,
+        <<"spec">> := #{
+            <<"class">> := <<"test3">>,
+            <<"id">> := <<"id3">>
+        },
+        <<"metadata">> := #{
+            <<"subtype">> := <<"TestType">>,
+            <<"namespace">> := <<"a.test.my_actors">>,
+            <<"uid">> := ID1_UID,
+            <<"name">> := <<"id1">>,
+            <<"labels">> := #{
+                <<?LABEL_ACCESS_ID/binary, "-test3">> := <<"id3">>
+            } = L3,
+            <<"annotations">> := #{
+                <<"ann1">> := <<"value1">>
+            }
+        }
+    } = ID3,
+    1 = map_size(L3),
+
+    % Find
+    {ok, #actor_id{uid=ID1_UID}} = nkactor_core_access_id_actor:find_id(?ACTOR_SRV, <<>>, test3, id3),
+    {error, {label_not_found, _}} = nkactor_core_access_id_actor:find_id(?ACTOR_SRV, <<>>, test, id2),
+
+    % UPDATE NAME / NAMESPACE
+    B4 = yaml(<<"
+        spec:
+            class: test3
+            id: id2
+        metadata:
+            namespace: b.a.test.my_actors
+            name: id2
+    ">>),
+    {error, #{<<"message">> := <<"Field 'metadata.name' is invalid">>}} =
+        kapi_req(#{verb=>update, namespace=>"a.test.my_actors", resource=>accessids, name=>id1, body=>B4}),
+
+
+    {ok, ID4} = kapi_req(#{verb=>update, namespace=>"a.test.my_actors", resource=>accessids, name=>id1, body=>B4, params=>#{allowNameChange=>true}}),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"AccessId">>,
+        <<"spec">> := #{
+            <<"class">> := <<"test3">>,
+            <<"id">> := <<"id2">>
+        },
+        <<"metadata">> := #{
+            <<"subtype">> := <<"TestType">>,
+            <<"namespace">> := <<"b.a.test.my_actors">>,
+            <<"uid">> := ID1_UID,
+            <<"name">> := <<"id2">>,
+            <<"labels">> := #{
+                <<?LABEL_ACCESS_ID/binary, "-test3">> := <<"id2">>
+            },
+            <<"annotations">> := #{
+                <<"ann1">> := <<"value1">>
+            }
+        }
+    } = ID4,
+    {ok, #actor_id{uid=ID1_UID}} = nkactor:find(#actor_id{group=?GROUP_CORE, resource=?RES_CORE_ACCESS_IDS, namespace= <<"b.a.test.my_actors">>, name= <<"id2">>}),
+    {error, actor_not_found} = nkactor:find(#actor_id{group=?GROUP_CORE, resource=?RES_CORE_ACCESS_IDS, namespace= <<"a.test.my_actors">>, name= <<"id1">>}),
+    {error, actor_not_found} = nkactor:find(#actor_id{group=?GROUP_CORE, resource=?RES_CORE_ACCESS_IDS, namespace= <<"a.test.my_actors">>, name= <<"id2">>}),
+    {error, actor_not_found} = nkactor:find(#actor_id{group=?GROUP_CORE, resource=?RES_CORE_ACCESS_IDS, namespace= <<"b.a.test.my_actors">>, name= <<"id1">>}),
     ok.
 
 
@@ -592,8 +672,6 @@ auto_activate_test() ->
     {ok, #{<<"metadata">>:=#{<<"size">>:=0}}} =
         kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks}),
     ok.
-
-
 
 
 session_test() ->
