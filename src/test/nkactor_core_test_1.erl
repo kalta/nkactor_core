@@ -356,7 +356,7 @@ api_test() ->
                 <<"singularName">> := <<"configmap">>,
                 <<"verbs">> := [
                     <<"create">>,<<"delete">>,<<"deletecollection">>,<<"get">>,
-                    <<"list">>,<<"update">>,<<"watch">>
+                    <<"list">>,<<"update">>
                 ]
             }
             |
@@ -914,49 +914,53 @@ contact_test() ->
                 <<"fullName">> := <<"My Náme My Surname"/utf8>>
             },
             <<"uid">> := C1_UID
-        }
+        }=Meta1
     } = CT1,
 
-%%    {error, #{<<"reason">>:= <<"uniqueness_violation">>}} = kapi_req(#{verb=>create, body=>Body2}),
-%%
-%%    Spec2 = maps:remove(<<"im">>, Spec1),
-%%    Body3 = maps:remove(<<"status">>, CT1#{<<"spec">>:=Spec2}),
-%%    {ok, CT2} = kapi_req(#{verb=>update, body=>Body3}),
-%%    #{
-%%        <<"spec">> := Spec2,
-%%        <<"metadata">> := #{
-%%            <<"uid">> := C1_UID,
-%%            <<"creationTime">> := T1,
-%%            <<"updateTime">> := T2,
-%%            <<"generation">> := 1,
-%%            <<"resourceVersion">> := Rs2
-%%        }
-%%    } = CT2,
-%%    true = Rs1 /= Rs2,
-%%    true = T2 > T1,
-%%
-%%    {error, #{<<"message">>:= <<"Field 'apiVersion' is invalid">>}} = kapi_req(#{verb=>update, group=>core2, body=>Body2}),
-%%    {error, #{<<"message">>:= <<"Field 'resource' is invalid">>}} = kapi_req(#{verb=>update, resource=>users, body=>Body2}),
-%%    {error, #{<<"message">>:= <<"Field 'metadata.name' is invalid">>}} = kapi_req(#{verb=>update, name=>name2, body=>Body2}),
-%%    {error, #{<<"message">>:= <<"Field 'metadata.namespace' is invalid">>}} = kapi_req(#{verb=>update, namespace=>"a-nktest", body=>Body2}),
-%%    {ok, _} = kapi_req(#{verb=>update, namespace=>"c.b.a.test.my_actors", resource=>"contacts", name=>"ct1", body=>Body2}),
-%%
-%%    {1, 1, [#{<<"metadata">>:=#{<<"uid">>:=C1_UID}}=CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":io.netk.core.users"),
-%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":1"),
-%%    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M&sort=spec.timezone"),
-%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:F"),
-%%    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2007"),
-%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2020"),
-%%
-%%    {422, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
-%%
-%%    % Remove link
-%%    Body4 = maps:remove(<<"status">>, CT1#{<<"spec">>:=maps:remove(<<"user">>, Spec1)}),
-%%
-%%    {ok, _} = kapi_req(#{verb=>update, resource=>"contacts", name=>"ct1", body=>Body4}),
-%%    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo=user:"++binary_to_list(UT1_UID)),
-%%    {200, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
-%%    {error, #{<<"reason">>:=<<"linked_actor_unknown">>}} = kapi_req(#{verb=>create, body=>Body2}),
+    {error, #{<<"reason">>:= <<"uniqueness_violation">>}} = kapi_req(#{verb=>create, body=>Body2}),
+
+    Spec2 = maps:remove(<<"im">>, Spec1),
+    Meta2 = maps:without([<<"creationTime">>, <<"updateTime">>, <<"generation">>, <<"resourceVersion">>, <<"uid">>], Meta1),
+    Body3 = maps:remove(<<"status">>, CT1#{<<"spec">>:=Spec2}),
+    Body4 = Body3#{<<"metadata">>:=Meta2},
+    {ok, CT2} = kapi_req(#{verb=>update, body=>Body4}),
+    #{
+        <<"spec">> := Spec2,
+        <<"metadata">> := #{
+            <<"uid">> := C1_UID,
+            <<"creationTime">> := T1,
+            <<"updateTime">> := T2,
+            <<"generation">> := 1,
+            <<"resourceVersion">> := Rs2
+        }
+    } = CT2,
+    true = Rs1 /= Rs2,
+    true = T2 > T1,
+
+    {error, #{<<"message">>:= <<"Field 'apiVersion' is invalid">>}} = kapi_req(#{verb=>update, group=>core2, body=>Body2}),
+    {error, #{<<"message">>:= <<"Field 'resource' is invalid">>}} = kapi_req(#{verb=>update, resource=>users, body=>Body2}),
+    {error, #{<<"message">>:= <<"Field 'metadata.name' is invalid">>}} = kapi_req(#{verb=>update, name=>name2, body=>Body2}),
+    {error, #{<<"message">>:= <<"Field 'metadata.namespace' is invalid">>}} = kapi_req(#{verb=>update, namespace=>"a-nktest", body=>Body2}),
+    {ok, _} = kapi_req(#{verb=>update, namespace=>"c.b.a.test.my_actors", resource=>"contacts", name=>"ct1", body=>Body2}),
+
+    {1, 1, [#{<<"metadata">>:=#{<<"uid">>:=C1_UID}}=CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":"++binary_to_list(?LINK_CORE_CONTACT_USER)),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo="++binary_to_list(UT1_UID)++":1"),
+    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M&sort=spec.timezone"),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:F"),
+    {1, 1, [CT3]} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2007"),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?fieldSelector=spec.gender:M,spec.birthTime:gt:2020"),
+
+    {422, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
+
+    % Remove link
+    Body5 = maps:remove(<<"status">>, CT1#{<<"spec">>:=maps:remove(<<"user">>, Spec1), <<"metadata">>:=Meta2}),
+
+    {ok, R} = kapi_req(#{verb=>update, resource=>"contacts", name=>"ct1", body=>Body5}),
+    {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo=user:"++binary_to_list(UT1_UID)),
+    {200, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
+    #{<<"metadata">>:=M2} = Body2,
+    Body2B = Body2#{<<"metadata">>:=M2#{<<"name">>:=<<"ct2">>}},
+    {error, #{<<"reason">>:=<<"linked_actor_unknown">>}} = kapi_req(#{verb=>create, body=>Body2B}),
     {200, _} = http_delete("/namespaces/c.b.a.test.my_actors/contacts/ct1"),
     ok.
 %%

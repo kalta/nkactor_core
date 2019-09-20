@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, sync_op/3, init/2, request/4, stop/2]).
+-export([config/0, parse/3, sync_op/3, init/2, request/4, expired/2]).
 
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -66,7 +66,7 @@ parse(Op, Actor, _Req) ->
 
 %% @doc
 request(get, <<"_rpc/refresh">>, ActorId, _Req) ->
-    case nkactor:sync_op(ActorId, refresh) of
+    case nkactor:sync_op(ActorId, nkactor_refresh) of
         ok ->
             {status, actor_updated};
         {error, Error} ->
@@ -78,17 +78,17 @@ request(_Verb, _Path, _ActorId, _Req) ->
 
 
 %% @doc
-init(_Op, #actor_st{unload_policy = {expires, _}}=ActorSt) ->
+init(_Op, #actor_st{actor=#{metadata:=#{expires_time:=_}}}=ActorSt) ->
     % The parser shouldn't allow to get to this point
     {ok, ActorSt}.
 
 
 %% @doc
-sync_op(refresh, _From, ActorSt) ->
+sync_op(nkactor_refresh, _From, ActorSt) ->
     #actor_st{actor=#{data:=Data}=Actor} = ActorSt,
     #{spec:=#{ttl_secs:=Secs}} = Data,
     Actor2 = nkactor_lib:set_ttl(Actor, 1000*Secs),
-    {ok, ActorSt2} = nkactor_srv_lib:update(Actor2, #{}, ActorSt),
+    ActorSt2 = nkactor_srv_lib:set_unload_policy(ActorSt#actor_st{actor=Actor2}),
     {reply, ok, ActorSt2};
 
 sync_op(_Op, _From, _ActorSt) ->
@@ -96,9 +96,6 @@ sync_op(_Op, _From, _ActorSt) ->
 
 
 %% @doc If expires, delete the actor
-stop(actor_expired, ActorSt) ->
-    {delete, ActorSt};
-
-stop(_Reason, ActorSt) ->
-    {ok, ActorSt}.
+expired(_Time, ActorSt) ->
+    {delete, ActorSt}.
 

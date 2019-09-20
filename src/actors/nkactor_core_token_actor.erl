@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, sync_op/3, init/2, stop/2, request/4]).
+-export([config/0, parse/3, sync_op/3, init/2, expired/2, request/4]).
 
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -41,7 +41,8 @@ config() ->
     #{
         resource => ?RES_CORE_TOKENS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update]
+        verbs => [create, delete, deletecollection, get, list, update],
+        ttl => 60 * 60 * 1000
     }.
 
 
@@ -83,12 +84,16 @@ request(_Verb, _Path, _ActorId, _Req) ->
 
 
 %% @doc
-init(_Op, #actor_st{unload_policy = {expires, _}}=ActorSt) ->
+init(_Op, #actor_st{actor=#{metadata:=#{activate_time:=_}}}=ActorSt) ->
     % The parser shouldn't allow to get to this point
     {ok, ActorSt};
 
 init(_Op, _ActorSt) ->
     {error, expires_missing}.
+
+%% @doc
+expired(_T, ActorSt) ->
+    {delete, ActorSt}.
 
 
 %% @doc
@@ -98,9 +103,4 @@ sync_op({token_execute, _Params}, _From, ActorSt) ->
 
 sync_op(_Op, _From, _ActorSt) ->
     continue.
-
-
-%% @doc If the token stops normally, delete it
-stop(_Reason, ActorSt) ->
-    {delete, ActorSt}.
 

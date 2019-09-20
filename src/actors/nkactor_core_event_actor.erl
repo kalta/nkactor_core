@@ -37,7 +37,7 @@
 config() ->
     #{
         resource => ?RES_CORE_EVENTS,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [delete, deletecollection, get, list],
         short_names => [ev],
         activable => false,

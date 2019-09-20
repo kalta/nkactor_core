@@ -218,7 +218,7 @@ request(_Verb, _Path, _ActorId, _Req) ->
 %% @doc
 sync_op(nkactor_get_body, _From, ActorSt) ->
     #actor_st{srv=SrvId, actor=#{data:=Data}=Actor} = ActorSt,
-    LinkType = nkactor_lib:link_type(?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS),
+    LinkType = ?LINK_CORE_FILE_PROVIDER,
     [ProviderUID] = nkactor_lib:get_linked_uids(LinkType, Actor),
     #{spec:=#{content_type:=CT, external_id:=Id}=Spec} = Data,
     FileMeta1 = #{
@@ -256,7 +256,7 @@ sync_op(nkactor_get_body, _From, ActorSt) ->
 sync_op({nkactor_get_download_link, _ExtUrl}, _From, ActorSt) ->
     #actor_st{actor_id=_ActorId, actor=#{data:=Data}=Actor} = ActorSt,
     #{spec:=#{external_id:=Id}} = Data,
-    LinkType = nkactor_lib:link_type(?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS),
+    LinkType = ?LINK_CORE_FILE_PROVIDER,
     [ProvUID] = nkactor_lib:get_linked_uids(LinkType, Actor),
     Reply = case nkactor_core_file_provider_actor:op_get_direct_download_link(ProvUID, Id) of
         {ok, Link, TTL} ->
@@ -295,7 +295,7 @@ do_parse(Spec, #{provider:=Provider}, Actor, Req) ->
     do_parse(Spec#{provider=>Provider}, #{}, Actor, Req);
 
 do_parse(#{provider:=ProviderId}=Spec, _Params, Actor, Req) ->
-    case nkactor_lib:add_checked_link(ProviderId, ?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS, Actor) of
+    case nkactor_lib:add_checked_link(ProviderId, ?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS, Actor, ?LINK_CORE_FILE_PROVIDER) of
         {ok, ProvActorId, Actor2} ->
             case nkactor_core_file_provider_actor:op_get_spec(ProviderId) of
                 {ok, _, ProvSpec} ->

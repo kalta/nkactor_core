@@ -72,7 +72,7 @@ op_check_pass(UserId, Pass) ->
 config() ->
     #{
         resource => ?RES_CORE_USERS,
-        versions => [<<"0">>],
+        versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, update],
         short_names => [u],
         fields_filter => [

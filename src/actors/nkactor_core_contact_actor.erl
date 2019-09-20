@@ -184,7 +184,7 @@ update(Actor, ActorSt) ->
 
 %% @private
 add_user_link(Actor) ->
-    Actor2 = nkactor_lib:rm_links(?GROUP_CORE, ?LINK_CORE_CONTACT_USER, Actor),
+    Actor2 = nkactor_lib:rm_links(Actor, ?LINK_CORE_CONTACT_USER),
     case Actor2 of
         #{data:=#{spec:=#{user:=UserId}}} ->
             case nkactor_lib:add_checked_link(UserId, ?GROUP_CORE, ?RES_CORE_USERS, Actor2, ?LINK_CORE_CONTACT_USER) of

@@ -24,8 +24,8 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, request/4, init/2, event/2,
-         sync_op/3, async_op/2, stop/2]).
+-export([config/0, parse/3, request/4, init/2, update/2, event/2,
+         sync_op/3, async_op/2, expired/2]).
 -export_type([event/0]).
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -54,7 +54,6 @@ config() ->
         resource => ?RES_CORE_TASKS,
         versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, update],
-        auto_activate => true,
         fields_filter => [
             'status.last_try_start_time',
             'status.tries'
@@ -123,14 +122,13 @@ request(_Verb, _Path, _ActorId, _Req) ->
 %%   and delete the actor if exceeded
 %% - program 'updated_state' event with progress=start (see event/2)
 %% - save updated status
-init(_Op, #actor_st{unload_policy={expires, _}, actor=Actor}=ActorSt) ->
-    #{data:=Data} = Actor,
+init(_Op, #actor_st{actor=#{data:=Data, metadata:=#{expires_time:=_}}=Actor}=ActorSt) ->
     Status = maps:get(status, Data, #{}),
     Tries = maps:get(tries, Status, 0),
     #{spec := #{max_tries:=MaxTries}} = Data,
     case Tries >= MaxTries of
         false ->
-            Now = nklib_date:now_3339(msecs),
+            Now = nklib_date:now_3339(usecs),
             Status2 = Status#{
                 task_status => init,
                 last_try_start_time => Now,
@@ -143,14 +141,13 @@ init(_Op, #actor_st{unload_policy={expires, _}, actor=Actor}=ActorSt) ->
             % We don't want to call set_run_state/2 yet, because the start
             % event would arrive before the creation event
             nkactor:async_op(self(), {update_state, #{task_status=>start}}),
-            {ok, ActorSt2};
+            ActorSt3 = update_activate_time(ActorSt2),
+            {ok, ActorSt3};
         true ->
             Status2 = Status#{
                 task_status =>  failure,
                 error_msg => <<"task_max_tries_reached">>
             },
-            % Allow in-queue events to be processed
-            % timer:sleep(100),
             ActorSt2 = set_status(Status2, ActorSt),
             ?ACTOR_LOG(notice, "max tries reached for task", [], ActorSt2),
             {delete, task_max_tries_reached}
@@ -159,6 +156,9 @@ init(_Op, #actor_st{unload_policy={expires, _}, actor=Actor}=ActorSt) ->
 init(_Op, _ActorSt) ->
     {error, expires_missing}.
 
+
+update(Actor, ActorSt) ->
+    update_activate_time(ActorSt#actor_st{actor=Actor}).
 
 
 %%%% @doc Called on every event launched at this actor (our's or not)
@@ -222,23 +222,33 @@ async_op(_Op, _ActorSt) ->
 
 
 %% @doc
-stop(actor_expired, ActorSt) ->
+expired(_Time, ActorSt) ->
     Status = #{
         status => failure,
         error_msg => <<"task_max_time_reached">>
     },
     ActorSt2 = set_status(Status, ActorSt),
     ?ACTOR_LOG(notice, "max time reached for task", [], ActorSt2),
-    {delete, ActorSt2};
-
-stop(_Reason, ActorSt) ->
-    {ok, ActorSt}.
+    {delete, ActorSt2}.
 
 
 
 %% ===================================================================
 %% Internal
 %% ===================================================================
+
+
+%% @private
+update_activate_time(#actor_st{actor=Actor}=ActorSt) ->
+    % If we set no activation time, set it permanent
+    case Actor of
+        #{metadata:=#{activate_time:=_}} ->
+            ActorSt;
+        _ ->
+            nkactor_srv_lib:set_activate(true, ActorSt)
+    end.
+
+
 
 %% @doc
 do_update_state(Body, ActorSt) ->
@@ -280,7 +290,7 @@ set_status(Status, #actor_st{actor=#{data:=Data}=Actor}=ActorSt) ->
             true
     end,
     ActorSt2 = ActorSt#actor_st{actor=Actor#{data:=Data#{status => NewStatus2}}},
-    ActorSt3 = nkactor_srv_lib:set_active(IsActive, ActorSt2),
+    ActorSt3 = nkactor_srv_lib:set_activate(IsActive, ActorSt2),
     Event = {updated_state, NewStatus2},
     % Sleep so that it won't go to the same msec
     timer:sleep(2),
