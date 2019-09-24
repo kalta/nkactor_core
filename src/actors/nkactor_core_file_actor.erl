@@ -104,14 +104,29 @@ config() ->
 
 
 %% @doc
+parse(read, _Actor, _Req) ->
+    Syntax = #{
+        spec => #{
+            content_type => binary,
+            provider => binary,
+            external_id => binary,
+            size => integer,
+            hash => binary,
+            password => binary,
+            '__mandatory' => [content_type, provider, size]
+        },
+        '__mandatory' => [spec]
+    },
+    {syntax, <<"v1a1">>, Syntax};
+
 parse(create, Actor, Req) ->
     Syntax = #{
         spec => #{
             content_type => binary,
             provider => binary,
+            external_id => binary,
             body_base64 => base64,
             body_binary => binary,
-            external_id => binary,
             url => binary
         },
         '__mandatory' => [spec]
@@ -120,7 +135,11 @@ parse(create, Actor, Req) ->
         {ok, Actor2} ->
             #{data:=#{spec:=Spec2}}=Actor2,
             Params = maps:get(params, Req, #{}),
-            do_parse(Spec2, Params, Actor2, Req);
+            % If the provider is valid, we will try to get the file and upload it
+            % - if it is included in body (base64 or binary)
+            % - if a url is provided, we try to download it
+            % - if an external_id is provided, we try to get it
+            do_parse_provider(Spec2, Params, Actor2, Req);
         {error, Error} ->
             {error, Error}
     end;
@@ -143,11 +162,12 @@ parse(update, _Actor, _Req) ->
 
 
 %% @doc
-request(get, <<>>, ActorId, #{params:=Params}) ->
+request(get, <<>>, ActorId, Req) ->
     case nkactor:get_actor(ActorId) of
         {ok, #{data:=Data}=Actor} ->
-            case nklib_syntax:parse(Params, #{get_body_inline=>boolean}) of
-                {ok, #{get_body_inline:=true}, _} ->
+            Syntax = #{get_body_inline=>boolean},
+            case nkactor_lib:parse_request_params(Req, Syntax) of
+                {ok, #{get_body_inline:=true}} ->
                     case op_get_body(ActorId) of
                         {ok, _CT, Body} ->
                             #{spec:=Spec} = Data,
@@ -157,16 +177,19 @@ request(get, <<>>, ActorId, #{params:=Params}) ->
                         {error, Error} ->
                             {error, Error}
                     end;
-                _ ->
-                    {ok, Actor}
+                {ok, _} ->
+                    {ok, Actor};
+                {error, Error} ->
+                    {error, Error}
             end;
         {error, Error} ->
             {error, Error}
     end;
 
-request(upload, <<>>, _ActorId, #{params:=Params}=Req) ->
-    case nklib_syntax:parse(Params, #{provider=>binary}) of
-        {ok, #{provider:=Provider}, _} ->
+request(upload, <<>>, _ActorId, Req) ->
+    Syntax = #{provider=>binary, '__mandatory'=>provider},
+    case nkactor_lib:parse_request_params(Req, Syntax) of
+        {ok, #{provider:=Provider}} ->
             case Req of
                 #{
                     body := Body,
@@ -181,15 +204,14 @@ request(upload, <<>>, _ActorId, #{params:=Params}=Req) ->
                     },
                     Req2 = Req#{
                         verb := create,
-                        body := Body2,
-                        subresource := <<>>
+                        body := Body2
                     },
                     nkactor:request(Req2);
                 _ ->
                     {error, request_body_invalid}
             end;
-        _ ->
-            {error, {field_missing, <<"provider">>}}
+        {error, Error} ->
+            {error, Error}
     end;
 
 request(get, <<"_download">>, ActorId, _Req) ->
@@ -253,7 +275,7 @@ sync_op(nkactor_get_body, _From, ActorSt) ->
     end,
     {reply, Reply, ActorSt};
 
-sync_op({nkactor_get_download_link, _ExtUrl}, _From, ActorSt) ->
+sync_op({nkactor_get_download_link, ExtUrl}, _From, ActorSt) ->
     #actor_st{actor_id=_ActorId, actor=#{data:=Data}=Actor} = ActorSt,
     #{spec:=#{external_id:=Id}} = Data,
     LinkType = ?LINK_CORE_FILE_PROVIDER,
@@ -291,14 +313,16 @@ sync_op(_Op, _From, _ActorSt) ->
 
 
 %% @private
-do_parse(Spec, #{provider:=Provider}, Actor, Req) ->
-    do_parse(Spec#{provider=>Provider}, #{}, Actor, Req);
+% If provider in params, move to spec
+do_parse_provider(Spec, #{provider:=Provider}, Actor, Req) ->
+    do_parse_provider(Spec#{provider=>Provider}, #{}, Actor, Req);
 
-do_parse(#{provider:=ProviderId}=Spec, _Params, Actor, Req) ->
+do_parse_provider(#{provider:=ProviderId}=Spec, _Params, Actor, Req) ->
     case nkactor_lib:add_checked_link(ProviderId, ?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS, Actor, ?LINK_CORE_FILE_PROVIDER) of
         {ok, ProvActorId, Actor2} ->
             case nkactor_core_file_provider_actor:op_get_spec(ProviderId) of
                 {ok, _, ProvSpec} ->
+                    % We have a valid provider,
                     do_parse_upload(Spec, ProvActorId, ProvSpec, Actor2, Req);
                 {error, _} ->
                     {error, {provider_unknown, ProviderId}}
@@ -307,7 +331,7 @@ do_parse(#{provider:=ProviderId}=Spec, _Params, Actor, Req) ->
             {error, {provider_unknown, ProviderId}}
     end;
 
-do_parse(_Spec, _Params, _Actor, _Req) ->
+do_parse_provider(_Spec, _Params, _Actor, _Req) ->
     {error, {field_missing, <<"data.spec.provider">>}}.
 
 
@@ -317,6 +341,7 @@ do_parse_upload(#{body_base64:=Bin}=Spec, ProvActorId, ProvSpec, Actor, Req) ->
     do_parse_upload(Spec2#{body_binary=>Bin}, ProvActorId, ProvSpec, Actor, Req);
 
 do_parse_upload(#{url:=Url}=Spec, ProvActorId, ProvSpec, Actor, Req) ->
+    ?ACTOR_LOG(notice, "resolving url: ~s", [Url]),
     case get_url(ProvActorId, ProvSpec, Url) of
         {ok, CT, Body} ->
             Spec2 = maps:remove(url, Spec),
@@ -330,6 +355,7 @@ do_parse_upload(#{body_binary:=Bin, content_type:=CT}=Spec, _ProvActorId, ProvSp
     #{uid:=UID, data:=Data} = Actor,
     FileMeta1 = #{name => UID, content_type => CT},
     #{srv:=SrvId} = Req,
+    ?ACTOR_LOG(notice, "starting upload", []),
     case nkfile:upload(SrvId, ProvSpec, FileMeta1, Bin) of
         {ok, FileMeta2, _UpMeta} ->
             #{size:=Size} = FileMeta2,
@@ -359,15 +385,15 @@ do_parse_upload(#{body_binary:=Bin, content_type:=CT}=Spec, _ProvActorId, ProvSp
 do_parse_upload(#{body_binary:=_}, _ProvActorId, _ProvSpec, _Actor, _Req) ->
     {error, {field_missing, <<"spec.content_type">>}};
 
-do_parse_upload(#{external_id:=Id, content_type:=CT}=Spec, _ProvActorId, ProvSpec, Actor, Req) ->
+do_parse_upload(#{external_id:=Id}=Spec, _ProvActorId, ProvSpec, Actor, Req) ->
     #{srv:=SrvId} = Req,
     case nkfile:get_file_meta(SrvId, ProvSpec, Id) of
         {ok, #{content_type:=CT, size:=Size}} ->
             #{data:=Data} = Actor,
-            Data2 = Data#{spec => Spec#{size => Size}},
+            Data2 = Data#{spec => Spec#{size => Size, content_type=>CT}},
             {ok, Actor#{data:=Data2}};
-        {ok, _} ->
-            {error, content_type_invalid};
+        %{ok, _} ->
+        %    {error, content_type_invalid};
         {error, {file_too_large, Id}} ->
             case nkfile:delete(SrvId, ProvSpec, #{name=>Id}) of
                 ok ->
@@ -380,13 +406,11 @@ do_parse_upload(#{external_id:=Id, content_type:=CT}=Spec, _ProvActorId, ProvSpe
             {error, Error}
     end;
 
-do_parse_upload(#{external_id:=_}, _ProvActorId, _ProvSpec, _Actor, _Req) ->
-    {error, {field_missing, <<"spec.content_type">>}};
+%%do_parse_upload(#{external_id:=_}, _ProvActorId, _ProvSpec, _Actor, _Req) ->
+%%    {error, {field_missing, <<"spec.content_type">>}};
 
 do_parse_upload(_Spec, _ProvActorId, _ProvSpec, _Actor, _Req) ->
     {error, {field_missing, <<"spec.body_base64">>}}.
-
-
 
 
 %% @doc

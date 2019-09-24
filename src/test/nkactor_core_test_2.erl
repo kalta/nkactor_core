@@ -50,8 +50,8 @@ all_tests() ->
     ok = session_test(),
     ok = future_activated_test(),
     ok = auto_activate_test(),
-%%    ok = file_provider_test(),
-%%    ok = file_test(),
+    ok = file_provider_test(),
+    ok = file_test(),
 %%    nkactor_core_test_util:delete_test_data(),
     ok.
 
@@ -128,14 +128,23 @@ access_id_test() ->
             } = L3,
             <<"annotations">> := #{
                 <<"ann1">> := <<"value1">>
-            }
-        }
+            },
+            <<"generation">> := 1
+        }=Meta3
     } = ID3,
     1 = map_size(L3),
 
     % Find
     {ok, #actor_id{uid=ID1_UID}} = nkactor_core_access_id_actor:find_id(?ACTOR_SRV, <<>>, test3, id3),
     {error, {label_not_found, _}} = nkactor_core_access_id_actor:find_id(?ACTOR_SRV, <<>>, test, id2),
+
+    % Try to update invalid fields
+    {ok, ID3} = kapi_req(#{verb=>update, body=>ID3}),
+
+    ID3c = ID3#{<<"metadata">>:=Meta3#{<<"uid">>:=<<"1">>}},
+    {error, #{<<"message">>:=<<"Updated invalid field 'uid'">>}} = kapi_req(#{verb=>update, body=>ID3c}),
+    ID3d = ID3#{<<"metadata">>:=Meta3#{<<"generation">>:=25}},
+    {error, #{<<"message">>:=<<"Updated invalid field 'metadata.generation'">>}} = kapi_req(#{verb=>update, body=>ID3d}),
 
     % UPDATE NAME / NAMESPACE
     B4 = yaml(<<"
@@ -731,7 +740,7 @@ future_activated_test() ->
         expire_timer := ExpTime1
     } = Times,
     lager:error("NKLOG TIMES ~p", [Times]),
-    true = ActTime1 > 1200 andalso ActTime1 < 2100,
+    true = ActTime1 > 1000 andalso ActTime1 < 2100,
     true = ExpTime1 > 3000 andalso ActTime1 < 4100,
 
     {ok, #actor_id{pid=P0}} = nkactor:find(T0_UID),
@@ -900,8 +909,8 @@ file_provider_test() ->
     {ok, _, #{
         id := FP1_UID,
         storage_class := nkfile_filesystem,
-        encryption_algo := aes_cfb128,
-        hash_algo := sha256,
+        encryption_algo := <<"aes_cfb128">>,
+        hash_algo := <<"sha256">>,
         max_size := 3,
         filesystem_config := #{file_path := <<"/tmp">>}
     }} = nkactor_core_file_provider_actor:op_get_spec("core:fileproviders:fs1.a.test.my_actors"),
@@ -970,9 +979,9 @@ file_test() ->
             <<"uid">> := F1_UID,
             <<"name">> := <<"f1">>,
             <<"links">> := #{
-                FS1_UID :=  <<"io.netk.core.fileproviders">>
+                FS1_UID :=  ?LINK_CORE_FILE_PROVIDER
             }
-        } = Meta1
+        }=Meta1
     } = F1,
     false = maps:is_key(<<"bodyBase64">>, Spec1),
 
@@ -994,11 +1003,11 @@ file_test() ->
     #{<<"spec">>:=#{<<"bodyBase64">>:=Body}} = F2,
 
     % Get a direct download
-    {ok, {{_, 200, _}, Hds, "123"}} = nkactor_core_test_util:httpc("/namespaces/a.test.my_actors/files/f1/_download"),     "type1" = nklib_util:get_value("content-type", Hds),
-
+    {ok, {{_, 200, _}, Hds, "123"}} = nkactor_core_test_util:httpc("/namespaces/a.test.my_actors/files/f1/_download"),
+    "type1" = nklib_util:get_value("content-type", Hds),
 
     % Cannot update file
-    Y2 = maps:remove(<<"status">>, F1#{
+    Y2 = maps:without([<<"status">>], F1#{
         <<"spec">> := Spec1#{
             <<"contentType">> := <<"type2">>
         }
@@ -1014,11 +1023,13 @@ file_test() ->
             }
         }
     }),
+
     {ok, F3} = kapi_req(#{verb=>update, body=>Y3}),
     #{<<"metadata">> := #{<<"annotations">> := #{<<"ann1">>:=<<"v1">>}}} = F3,
 
     % Filesystem uses standard downloads
     {200, #{<<"url">> := Url}} = http_get("/namespaces/a.test.my_actors/files/f1/_rpc/downloadLink"),
+    lager:error("NKLOG URL1 ~p", [Url]),
     <<"_download">> = lists:last(binary:split(Url, <<"/">>, [global])),
 
     % Send direct to _upload

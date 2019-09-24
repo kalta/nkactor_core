@@ -66,6 +66,9 @@ start() ->
     RestConfig = #{
         url => ?LISTEN,
         use_module => ?MODULE,
+        opts => #{
+            %external_url => "http://localhost:9001"
+        },
         plugins => [nkserver_ot],
         opentrace_filter => opentrace_filter()
     },
@@ -372,7 +375,7 @@ http_watch_stop(Ref) ->
 
 
 http_auth_header() ->
-    [{"x-nkdomain-token", nklib_util:to_list(?TOKEN)}].
+    [{"x-nk-token", nklib_util:to_list(?TOKEN)}].
 
 
 

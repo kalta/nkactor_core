@@ -77,19 +77,6 @@ op_get_file_meta(Id, ExternalId) ->
     nkactor:sync_op(Id, {nkactor_get_file_meta, ExternalId}).
 
 
-%%
-%%%% @private
-%%link_to_provider(SrvId, ApiId, Actor) ->
-%%    ProviderPath = nkactor_lib:process_id(SrvId, ApiId),
-%%    case nkservice_actor:activate({SrvId, ProviderPath}) of
-%%        {ok, #actor_id{group=?GROUP_CORE, resource=?RES_CORE_FILE_PROVIDERS}=ProvActorId, _} ->
-%%            LinkType = nkactor_core_actor_util:link_type(?GROUP_CORE, ?LINK_CORE_FILE_PROVIDER),
-%%            {ok, nkactor_core_actor_util:add_link(ProvActorId, LinkType, Actor)};
-%%        _ ->
-%%            {error, {provider_invalid, ApiId}}
-%%    end.
-
-
 %% ===================================================================
 %% Behaviour callbacks
 %% ===================================================================
@@ -126,8 +113,8 @@ parse(Op, Actor, _Req) ->
         spec => #{
             storage_class => {atom, [nkfile_filesystem, nkfile_s3]},
             max_size => {integer, 0, none},
-            encryption_algo => {atom, [aes_cfb128]},
-            hash_algo => {atom, [sha256]},
+            encryption_algo => binary,          % aes_cfb128
+            hash_algo => binary,                % sha256
             direct_download => boolean,
             direct_upload => boolean,
             direct_download_secs => pos_integer,
@@ -178,7 +165,7 @@ parse(Op, Actor, _Req) ->
 %% @doc
 %% Redirect to files, adding parameter
 request(Verb, <<"files/", Rest/binary>>, ActorId, Req) when Verb==create; Verb==upload ->
-    #{params:=Params}=Req,
+    Params = maps:get(params, Req, #{}),
     Path = nkactor_lib:actor_id_to_path(ActorId),
     Req2 = Req#{
         resource := ?RES_CORE_FILES,
@@ -188,18 +175,18 @@ request(Verb, <<"files/", Rest/binary>>, ActorId, Req) when Verb==create; Verb==
     Req3 = maps:remove(name, Req2),
     nkactor:request(Req3);
 
-request(get, <<"_rpc/upload_link">>, ActorId, #{params:=Params}) ->
-    Syntax = #{content_type => binary},
-    case nklib_syntax:parse(Params, Syntax) of
-        {ok, #{content_type:=CT}, _} ->
+request(get, <<"_rpc/upload_link">>, ActorId, Req) ->
+    Syntax = #{content_type => binary, '__mandatory'=>content_type},
+    case nkactor_lib:parse_request_params(Req, Syntax) of
+        {ok, #{content_type:=CT}} ->
             case op_get_upload_link(ActorId, CT) of
                 {ok, Method, Url, Name, TTL} ->
                     {ok, #{method=>Method, url=>Url, id=>Name, ttl_secs=>TTL}};
                 {error, Error} ->
                     {error, Error}
             end;
-        _ ->
-            {error, {field_missing, <<"content_type">>}}
+        {error, Error} ->
+            {error, Error}
     end;
 
 request(_Verb, _Path, _ActorId, _Req) ->
@@ -222,7 +209,7 @@ request(_Verb, _Path, _ActorId, _Req) ->
 
 %% @doc
 init(_Op, #actor_st{actor=Actor}=ActorSt) ->
-    set_spec_cache(Actor, ActorSt).
+    set_spec_cache(Actor, ActorSt#actor_st{run_state = #{}}).
 
 
 %% @doc
@@ -294,17 +281,11 @@ set_spec_cache(#{data:=#{spec:=Spec}}, ActorSt) ->
     Spec2 = Spec#{id => UID},
     case nkfile:parse_provider_spec(SrvId, Spec2) of
         {ok, Spec3} ->
-            RunState1 = case RunState of
-                undefined ->
-                    #{};
-                _ ->
-                    RunState
-            end,
-            RunState2 = RunState1#{provider_spec => Spec3},
+            RunState2 = RunState#{provider_spec => Spec3},
             {ok, ActorSt#actor_st{run_state=RunState2}};
         {error, Error} ->
             ?ACTOR_LOG(warning, "could not parse provider spec: ~p: ~p", [Spec2, Error]),
-            {error,provider_spec_invalid}
+            {error, provider_spec_invalid}
     end.
 
 
