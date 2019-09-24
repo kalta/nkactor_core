@@ -42,7 +42,7 @@
 
 start() ->
     PgSqlConfig = #{
-        targets => [#{url=>"tcp://root@127.0.0.1:26257"}],
+        targets => [#{url=>"tcp://root@127.0.0.1:26257", pool=>10}],
         flavour => cockroachdb,
         database => nkactor_test,
         debug => true,
@@ -60,7 +60,8 @@ start() ->
         ],
         pgsql_service => ?PGSQL_SRV,
         opentrace_filter => opentrace_filter(),
-        use_module => ?MODULE
+        use_module => ?MODULE,
+        debug => true
     },
     RestConfig = #{
         url => ?LISTEN,

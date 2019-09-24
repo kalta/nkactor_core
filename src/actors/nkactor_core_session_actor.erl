@@ -40,7 +40,8 @@ config() ->
     #{
         resource => ?RES_CORE_SESSIONS,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update]
+        verbs => [create, delete, deletecollection, get, list, update],
+        auto_activate => true
     }.
 
 
@@ -78,8 +79,7 @@ request(_Verb, _Path, _ActorId, _Req) ->
 
 
 %% @doc
-init(_Op, #actor_st{actor=#{metadata:=#{expires_time:=_}}}=ActorSt) ->
-    % The parser shouldn't allow to get to this point
+init(_Op, #actor_st{actor=#{metadata:=#{expire_time:=_}}}=ActorSt) ->
     {ok, ActorSt}.
 
 
@@ -88,7 +88,7 @@ sync_op(nkactor_refresh, _From, ActorSt) ->
     #actor_st{actor=#{data:=Data}=Actor} = ActorSt,
     #{spec:=#{ttl_secs:=Secs}} = Data,
     Actor2 = nkactor_lib:set_ttl(Actor, 1000*Secs),
-    ActorSt2 = nkactor_srv_lib:set_unload_policy(ActorSt#actor_st{actor=Actor2}),
+    ActorSt2 = nkactor_srv_lib:set_times(ActorSt#actor_st{actor=Actor2}),
     {reply, ok, ActorSt2};
 
 sync_op(_Op, _From, _ActorSt) ->

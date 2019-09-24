@@ -955,7 +955,7 @@ contact_test() ->
     % Remove link
     Body5 = maps:remove(<<"status">>, CT1#{<<"spec">>:=maps:remove(<<"user">>, Spec1), <<"metadata">>:=Meta2}),
 
-    {ok, R} = kapi_req(#{verb=>update, resource=>"contacts", name=>"ct1", body=>Body5}),
+    {ok, _R} = kapi_req(#{verb=>update, resource=>"contacts", name=>"ct1", body=>Body5}),
     {0, 0, []} = http_list("/namespaces/c.b.a.test.my_actors/contacts?linkedTo=user:"++binary_to_list(UT1_UID)),
     {200, _} = http_delete("/namespaces/b.a.test.my_actors/users/ut1"),
     #{<<"metadata">>:=M2} = Body2,

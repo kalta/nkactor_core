@@ -90,7 +90,7 @@ parse(Op, Actor, _Req) ->
         },
         '__mandatory' => [spec]
     },
-    % Set expires_time based on max_secs
+    % Set expire_time based on max_secs
     case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, #{data:=#{spec:=Spec}}=Actor2} ->
             #{max_secs:=MaxSecs} = Spec,
@@ -122,7 +122,7 @@ request(_Verb, _Path, _ActorId, _Req) ->
 %%   and delete the actor if exceeded
 %% - program 'updated_state' event with progress=start (see event/2)
 %% - save updated status
-init(_Op, #actor_st{actor=#{data:=Data, metadata:=#{expires_time:=_}}=Actor}=ActorSt) ->
+init(_Op, #actor_st{actor=#{data:=Data, metadata:=#{expire_time:=_}}=Actor}=ActorSt) ->
     Status = maps:get(status, Data, #{}),
     Tries = maps:get(tries, Status, 0),
     #{spec := #{max_tries:=MaxTries}} = Data,
@@ -141,7 +141,7 @@ init(_Op, #actor_st{actor=#{data:=Data, metadata:=#{expires_time:=_}}=Actor}=Act
             % We don't want to call set_run_state/2 yet, because the start
             % event would arrive before the creation event
             nkactor:async_op(self(), {update_state, #{task_status=>start}}),
-            ActorSt3 = update_activate_time(ActorSt2),
+            ActorSt3 = set_auto_activate(true, ActorSt2),
             {ok, ActorSt3};
         true ->
             Status2 = Status#{
@@ -151,14 +151,11 @@ init(_Op, #actor_st{actor=#{data:=Data, metadata:=#{expires_time:=_}}=Actor}=Act
             ActorSt2 = set_status(Status2, ActorSt),
             ?ACTOR_LOG(notice, "max tries reached for task", [], ActorSt2),
             {delete, task_max_tries_reached}
-    end;
-
-init(_Op, _ActorSt) ->
-    {error, expires_missing}.
+    end.
 
 
 update(Actor, ActorSt) ->
-    update_activate_time(ActorSt#actor_st{actor=Actor}).
+    set_auto_activate(true, ActorSt#actor_st{actor=Actor}).
 
 
 %%%% @doc Called on every event launched at this actor (our's or not)
@@ -228,7 +225,7 @@ expired(_Time, ActorSt) ->
         error_msg => <<"task_max_time_reached">>
     },
     ActorSt2 = set_status(Status, ActorSt),
-    ?ACTOR_LOG(notice, "max time reached for task", [], ActorSt2),
+    ?ACTOR_LOG(info, "max time reached for task", [], ActorSt2),
     {delete, ActorSt2}.
 
 
@@ -239,15 +236,14 @@ expired(_Time, ActorSt) ->
 
 
 %% @private
-update_activate_time(#actor_st{actor=Actor}=ActorSt) ->
+set_auto_activate(Bool, #actor_st{actor=Actor}=ActorSt) ->
     % If we set no activation time, set it permanent
     case Actor of
         #{metadata:=#{activate_time:=_}} ->
             ActorSt;
         _ ->
-            nkactor_srv_lib:set_activate(true, ActorSt)
+            nkactor_srv_lib:set_auto_activate(Bool, ActorSt)
     end.
-
 
 
 %% @doc
@@ -290,7 +286,7 @@ set_status(Status, #actor_st{actor=#{data:=Data}=Actor}=ActorSt) ->
             true
     end,
     ActorSt2 = ActorSt#actor_st{actor=Actor#{data:=Data#{status => NewStatus2}}},
-    ActorSt3 = nkactor_srv_lib:set_activate(IsActive, ActorSt2),
+    ActorSt3 = set_auto_activate(IsActive, ActorSt2),
     Event = {updated_state, NewStatus2},
     % Sleep so that it won't go to the same msec
     timer:sleep(2),

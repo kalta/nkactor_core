@@ -51,14 +51,14 @@ parse(Op, Actor, Req) ->
     Syntax = #{data => map},
     case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
         {ok, #{metadata:=Meta2}=Actor2} ->
-            case maps:is_key(expires_time, Meta2) of
+            case maps:is_key(expire_time, Meta2) of
                 true ->
                     {ok, Actor2};
                 false ->
                     case Req of
                         #{params:=#{ttl:=TTL}} when is_integer(TTL), TTL>0 ->
-                            % If no expires_time, we use the TTL to generate one
-                            Actor3 = nkactor_lib:maybe_set_ttl(Actor2, 1000*TTL),
+                            % If no expire_time, we use the TTL to generate one
+                            Actor3 = nkactor_lib:maybe_set_ttl(Actor2, TTL),
                             {ok, Actor3};
                         _ ->
                             {error, ttl_missing}
@@ -84,12 +84,16 @@ request(_Verb, _Path, _ActorId, _Req) ->
 
 
 %% @doc
-init(_Op, #actor_st{actor=#{metadata:=#{activate_time:=_}}}=ActorSt) ->
-    % The parser shouldn't allow to get to this point
-    {ok, ActorSt};
+init(_Op, #actor_st{actor=#{metadata:=#{expire_time:=Expire}=Meta}}=ActorSt) ->
+    % Set the activation time to the expiration date, if not set
+    ActorSt2 = case Meta of
+        #{activate_time:=_} ->
+            ActorSt;
+        _ ->
+            nkactor_srv_lib:set_activate_time(Expire, ActorSt)
+    end,
+    {ok, ActorSt2}.
 
-init(_Op, _ActorSt) ->
-    {error, expires_missing}.
 
 %% @doc
 expired(_T, ActorSt) ->
@@ -103,4 +107,5 @@ sync_op({token_execute, _Params}, _From, ActorSt) ->
 
 sync_op(_Op, _From, _ActorSt) ->
     continue.
+
 

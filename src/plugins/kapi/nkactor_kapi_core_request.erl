@@ -106,7 +106,7 @@ api_actor_to_actor_syntax() ->
 			<<"generation">> => {'__key', generation},
 			<<"creationTime">> => {'__key', creation_time},
 			<<"updateTime">> => {'__key', update_time},
-			<<"expiresTime">>=> {'__key', expires_time},
+			<<"expireTime">>=> {'__key', expire_time},
 			<<"labels">> => {'__key', labels},
 			<<"fts">> => {'__key', fts},
 			<<"links">> => {'__key', links},
@@ -114,6 +114,7 @@ api_actor_to_actor_syntax() ->
 			<<"isEnabled">> => {'__key', is_enabled},
 			<<"inAlaram">> => {'__key', in_alarm},
 			<<"alarms">> => {'__key', alarms},
+			<<"autoActivate">> => {'__key', auto_activate},
 			<<"activateTime">> => {'__key', activate_time},
 			<<"description">> => {'__key', description},
 			<<"trace_id">> => {'__key', trace_id}

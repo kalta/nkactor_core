@@ -75,6 +75,7 @@ config() ->
         versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, update],
         short_names => [u],
+        save_time => 5000,  % Used it tests
         fields_filter => [
             'spec.login',
             'spec.member'

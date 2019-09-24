@@ -48,6 +48,7 @@ all_tests() ->
     ok = config_test(),
     ok = task_test(),
     ok = session_test(),
+    ok = future_activated_test(),
     ok = auto_activate_test(),
 %%    ok = file_provider_test(),
 %%    ok = file_test(),
@@ -71,7 +72,7 @@ access_id_test() ->
                 ann1: value1
     ">>),
     {error, #{<<"reason">>:=<<"parameter_invalid">>}} = kapi_req(#{verb=>create, resource=>accessids, name=>id1, body=>B1, params=>#{ttl2=>2}}),
-    {created, ID1} = kapi_req(#{verb=>create, resource=>accessids, name=>id1, body=>B1, params=>#{ttl=>2}}),
+    {created, ID1} = kapi_req(#{verb=>create, resource=>accessids, name=>id1, body=>B1, params=>#{ttl=>2000}}),
     #{
         <<"apiVersion">> := <<"core/v1a1">>,
         <<"kind">> := <<"AccessId">>,
@@ -90,8 +91,10 @@ access_id_test() ->
             <<"annotations">> := #{
                 <<"ann1">> := <<"value1">>
             }
+
         }
     } = ID1,
+    ID1,
     {ok, ID2} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>accessids, name=>id1, params=>#{activate=>false}}),
     {ok, #actor_id{pid=Pid1}} = nkactor:find(ID1_UID),
     true = is_pid(Pid1),
@@ -221,7 +224,7 @@ alarm_test() ->
 
     % Not yet saved
     {ok, #{<<"items">>:=[]}} = kapi_req(#{verb=>list, resource=>users, params=>#{deep=>true, fieldSelector=>"metadata.inAlarm:true"}}),
-    {ok, #{save:=Time}} = nkactor_srv:get_timers(P),
+    {ok, #{save_timer:=Time}} = nkactor_srv:get_timers(P),
     true = is_integer(Time),
 
     % Don't wait for automatic save
@@ -274,7 +277,7 @@ token_test() ->
     ">>),
     {error, #{<<"reason">>:=<<"ttl_missing">>}} = kapi_req(#{verb=>create, resource=>tokens, body=>B1}),
 
-    {created, T1} = kapi_req(#{verb=>create, resource=>tokens, body=>B1, params=>#{ttl=>2}}),
+    {created, T1} = kapi_req(#{verb=>create, resource=>tokens, body=>B1, params=>#{ttl=>2000}}),
     #{
         <<"apiVersion">> := <<"core/v1a1">>,
         <<"kind">> := <<"Token">>,
@@ -286,16 +289,18 @@ token_test() ->
             <<"name">> := T1_Name,
             <<"subtype">> := <<"TestType">>,
             <<"namespace">> := <<"a.test.my_actors">>,
-            <<"expiresTime">> := ET,
-            <<"activateTime">> := ET,
+            <<"expireTime">> := ET1,
+            <<"activateTime">> := ET2,
             <<"annotations">> := #{
                 <<"ann1">> := <<"value1">>
             }
         }
     } = T1,
     Now = nklib_date:epoch(msecs),
-    {ok, ET2} = nklib_date:to_epoch(ET, msecs),
-    true = (ET2-Now) > 1500 andalso (ET2-Now) < 2500,
+    {ok, ET1b} = nklib_date:to_epoch(ET1, msecs),
+    true = (ET1b-Now) > 1500 andalso (ET1b-Now) < 2500,
+    {ok, ET2b} = nklib_date:to_epoch(ET2, msecs),
+    true = (ET2b-Now) > 1500 andalso (ET2b-Now) < 2500,
 
     {ok, T1} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>tokens, name=>T1_Name}),
 
@@ -313,7 +318,7 @@ token_test() ->
 %%%%    ] = Events,
 %%
     % Test consume
-    {created, T2} = kapi_req(#{verb=>create, resource=>tokens, body=>B1, params=>#{ttl=>2}}),
+    {created, T2} = kapi_req(#{verb=>create, resource=>tokens, body=>B1, params=>#{ttl=>2000}}),
     #{<<"metadata">>:=#{<<"name">>:=T2_Name}} = T2,
     {ok, T2} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>tokens, name=>T2_Name}),
     R0 = #{verb=>get, namespace=>"a.test.my_actors", resource=>tokens, name=>T2_Name, params=>#{consume=>true}},
@@ -322,7 +327,7 @@ token_test() ->
     {error, #{<<"reason">>:=<<"actor_not_found">>}} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>tokens, name=>T2_Name}),
 
     % Test deletion on load
-    {created, T3} = kapi_req(#{verb=>create, resource=>tokens, body=>B1, params=>#{ttl=>2}}),
+    {created, T3} = kapi_req(#{verb=>create, resource=>tokens, body=>B1, params=>#{ttl=>2000}}),
     #{<<"metadata">>:=#{<<"name">>:=T3_Name}} = T3,
     Path = <<"core:tokens:", T3_Name/binary, ".a.test.my_actors">>,
     {true, Pid1} = nkactor:is_activated(Path),
@@ -343,7 +348,7 @@ token_test() ->
     Params = #{getTotal => true, fieldSelector=><<"metadata.name:", T3_Name/binary>>},
     % List don't activate, so it still shows the actor
     {ok, #{<<"metadata">>:=#{<<"total">>:=1}}} = kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tokens, params=>Params}),
-    {error, #{<<"reason">>:=<<"actor_not_found">>}} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>tokens, name=>T3_Name}),
+    {error, #{<<"reason">>:=<<"actor_expired">>}} = kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>tokens, name=>T3_Name}),
     {ok, #{<<"metadata">>:=#{<<"total">>:=0}}} = kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tokens, params=>Params}),
     ok.
 
@@ -360,7 +365,7 @@ config_test() ->
             annotations:
                 ann1: value1
     ">>),
-    {created, C1} = kapi_req(#{verb=>create, resource=>configmaps, name=>c1, body=>B1, params=>#{ttl=>2}}),
+    {created, C1} = kapi_req(#{verb=>create, resource=>configmaps, name=>c1, body=>B1, params=>#{ttl=>2000}}),
     #{
         <<"apiVersion">> := <<"core/v1a1">>,
         <<"kind">> := <<"ConfigMap">>,
@@ -408,7 +413,8 @@ task_test() ->
             <<"subtype">> := <<"TestType">>,
             <<"namespace">> := <<"a.test.my_actors">>,
             <<"name">> := T1_Name,
-            <<"activateTime">> := <<"1">>
+            <<"expireTime">> := ExpT1,
+            <<"autoActivate">> := true
         },
         <<"status">> := #{
             <<"taskStatus">> := <<"start">>,
@@ -417,6 +423,9 @@ task_test() ->
             <<"tries">> := 1
         }
     } = T1,
+    {ok, ExpT2} = nklib_date:to_epoch(ExpT1, msecs),
+    Now = nklib_date:epoch(msecs),
+    true = (ExpT2-Now) > 1700 andalso (ExpT2-Now) < 2100,
 
     % Update state, we are on first try
     Url1 = "/namespaces/a.test.my_actors/tasks/"++binary_to_list(T1_Name),
@@ -640,7 +649,9 @@ session_test() ->
             <<"subtype">> := <<"TestType">>,
             <<"namespace">> := <<"a.test.my_actors">>,
             <<"uid">> := _S1_UID,
-            <<"name">> := <<"s1">>
+            <<"name">> := <<"s1">>,
+            <<"autoActivate">> := true,
+            <<"expireTime">> := _T1
         }
     } = S1,
 
@@ -648,30 +659,96 @@ session_test() ->
     P = "core:sessions:s1.a.test.my_actors",
     {ok, T1} = nkactor:sync_op(P, get_timers),
     #{
-        policy := {ttl, 10000},
-        ttl_timer := TTL1,
-        expires_time := Exp1,
-        activate_time := Exp1,
-        activate_timer := Rem1
+        policy := permanent,
+        ttl_timer := undefined,
+        expire_time := Exp1,
+        expire_timer := ExpTimer1,
+        activate_timer := undefined
     } = T1,
-    true = TTL1 > 8000 andalso TTL1 < 9000,
-    true = Rem1 > 900 andalso Rem1 < 1000,
+    true = ExpTimer1 > 800 andalso ExpTimer1 < 1100,
 
     {status, #{<<"reason">>:= <<"actor_updated">>}} =
         kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"sessions", name=>s1, subresource=><<"_rpc/refresh">>}),
 
     {ok, T2} = nkactor:sync_op(P, get_timers),
     #{
-        expires_time := Exp2,
-        activate_time := Exp2,
-        activate_timer := Rem2
+        expire_time := Exp2,
+        expire_timer := ExpTimer2,
+        activate_timer := undefined
     } = T2,
     true = Exp2 > Exp1,
-    true = Rem2 > 1900 andalso Rem2 < 2100,
+    true = ExpTimer2 > 1900 andalso ExpTimer2 < 2100,
 
     timer:sleep(2100),
     {error, #{<<"reason">> := <<"actor_not_found">>}} =
         kapi_req(#{verb=>get, namespace=>"a.test.my_actors", resource=>"sessions", name=>s1, subresource=><<"_rpc/refresh">>}),
+    ok.
+
+
+future_activated_test() ->
+    {ok, _} = kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>tasks,
+        params=>#{fieldSelector => <<"metadata.subtype:TestType">>}}),
+
+    Now1 = nklib_date:epoch(secs),
+    {ok, Act} = nklib_date:to_3339(Now1+2, secs),
+    %lager:error("NKLOG ACT ~p", [Act]),
+
+    Y0 = yaml(<<"
+        spec:
+            maxSecs: 2
+        metadata:
+            subtype: TestType
+            namespace: a.test.my_actors
+            activateTime: ", Act/binary, "
+    ">>),
+    {created, T0} = kapi_req(#{verb=>create, resource=>tasks, body=>Y0}),
+    #{
+        <<"apiVersion">> := <<"core/v1a1">>,
+        <<"kind">> := <<"Task">>,
+        <<"spec">> := #{
+            <<"maxSecs">> := 2
+        },
+        <<"metadata">> := #{
+            <<"subtype">> := <<"TestType">>,
+            <<"namespace">> := <<"a.test.my_actors">>,
+            <<"uid">> := T0_UID,
+            <<"activateTime">> := ActB,        % Not exactly the same
+            <<"expireTime">> := Exp1
+        } = Meta0
+    } = T0,
+    error = maps:find(<<"autoActivate">>, Meta0),
+    {ok, Exp2} = nklib_date:to_epoch(Exp1, msecs),
+    % Expire is start (2secs) + maxSecs (2secs)
+    Now2 = Now1*1000,
+    lager:error("NKLOG DIFF ~p", [Exp2-Now2]),
+    true = (Exp2-Now2) > 3000 andalso (Exp2-Now2) < 4100,
+
+    {ok, Times} = nkactor_srv:get_timers(T0_UID),
+    #{
+        activate_time := ActB,
+        activate_timer := ActTime1,
+        expire_time := Exp1,
+        expire_timer := ExpTime1
+    } = Times,
+    lager:error("NKLOG TIMES ~p", [Times]),
+    true = ActTime1 > 1200 andalso ActTime1 < 2100,
+    true = ExpTime1 > 3000 andalso ActTime1 < 4100,
+
+    {ok, #actor_id{pid=P0}} = nkactor:find(T0_UID),
+    exit(P0, kill),
+    timer:sleep(50),
+    {ok, #actor_id{pid=undefined}} = nkactor:find(T0_UID),
+
+    % It will be activated in 3 secs
+    {ok, []} = nkactor:search_activate(?ACTOR_SRV, 0),
+    {ok, [#actor_id{uid=T0_UID}]} = nkactor:search_activate(?ACTOR_SRV, 2100),
+    {ok, 0} = nkactor_util:activate_actors(?ACTOR_SRV, 0),
+    % It will be activated, even if the date is not yet... we should wait for callback
+    % but tasks don't wait currently
+    {ok, 1} = nkactor_util:activate_actors(?ACTOR_SRV, 2100),
+    % Wait for it to expire
+    timer:sleep(4000),
+    {error, actor_not_found} = nkactor:find(T0_UID),
     ok.
 
 
@@ -681,7 +758,7 @@ auto_activate_test() ->
 
     Y1 = yaml(<<"
         spec:
-            maxSecs: 2
+            maxSecs: 3
         metadata:
             subtype: TestType
             namespace: a.test.my_actors
@@ -704,32 +781,32 @@ auto_activate_test() ->
         kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks, params=>#{getTotal=>true}}),
 
     % They are already activated, not expired
-    {ok, []} = nkactor:activate_actors(?ACTOR_SRV),
-    {ok, [], _} = nkactor:search_expired(?ACTOR_SRV, #{}),
+    {ok, 0} = nkactor_util:activate_actors(?ACTOR_SRV, 0),
 
     % We kill them
     lists:foreach(fun(Pid) -> exit(Pid, kill) end, Pids1),
     timer:sleep(50),
 
     % They are reactivated by script
+    {ok, Ids} = nkactor:search_activate(?ACTOR_SRV, 0),
+    {ok, 10} = nkactor_util:activate_actors(?ACTOR_SRV, 0),
+    {ok, 0} = nkactor_util:activate_actors(?ACTOR_SRV, 0),
 
-    {ok, ActivatedIds} = nkactor:activate_actors(?ACTOR_SRV),
-    10 = length(ActivatedIds),
-    {ok, []} = nkactor:activate_actors(?ACTOR_SRV),
+    10 = length(Ids),
     Pids2 = lists:map(
         fun(ActorId) ->
             {true, Pid} = nkactor:is_activated(ActorId),
             Pid
         end,
-        ActivatedIds),
+        Ids),
 
     % We kill them again, and wait for expiration while unloaded
     lists:foreach(fun(Pid) -> exit(Pid, kill) end, Pids2),
-    timer:sleep(2100),
+    timer:sleep(3100),
 
     % We find them as expired
-    {ok, ExpiredIds2, _} = nkactor:search_expired(?ACTOR_SRV, #{}),
-    10 = length(ExpiredIds2),
+    {ok, Ids2} = nkactor:search_activate(?ACTOR_SRV, 0),
+    10 = length(Ids2),
 
     % They expired, but yet on db. When we try to reactivate them, they are deleted
     {ok, #{<<"metadata">>:=#{<<"total">>:=10}}} =
@@ -737,7 +814,7 @@ auto_activate_test() ->
             params=>#{getTotal=>true}}),
 
     % If we try to activate them, they will deleted on load
-    {ok, []} = nkactor:activate_actors(?ACTOR_SRV),
+    {ok, 10} = nkactor_util:activate_actors(?ACTOR_SRV, 0),
     timer:sleep(500),
     {ok, #{<<"metadata">>:=#{<<"size">>:=0}}} =
         kapi_req(#{verb=>list, namespace=>"a.test.my_actors", resource=>tasks}),
