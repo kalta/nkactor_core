@@ -52,7 +52,7 @@ all_tests() ->
     ok = auto_activate_test(),
     ok = file_provider_test(),
     ok = file_test(),
-%%    nkactor_core_test_util:delete_test_data(),
+    nkactor_core_test_util:delete_test_data(),
     ok.
 
 
@@ -71,7 +71,6 @@ access_id_test() ->
             annotations:
                 ann1: value1
     ">>),
-    {error, #{<<"reason">>:=<<"parameter_invalid">>}} = kapi_req(#{verb=>create, resource=>accessids, name=>id1, body=>B1, params=>#{ttl2=>2}}),
     {created, ID1} = kapi_req(#{verb=>create, resource=>accessids, name=>id1, body=>B1, params=>#{ttl=>2000}}),
     #{
         <<"apiVersion">> := <<"core/v1a1">>,
@@ -1003,8 +1002,10 @@ file_test() ->
     #{<<"spec">>:=#{<<"bodyBase64">>:=Body}} = F2,
 
     % Get a direct download
+    {ok, <<"type1">>, <<"123">>} = nkactor_core_file_actor:op_get_body(F1_UID),
     {ok, {{_, 200, _}, Hds, "123"}} = nkactor_core_test_util:httpc("/namespaces/a.test.my_actors/files/f1/_download"),
     "type1" = nklib_util:get_value("content-type", Hds),
+    "3" = nklib_util:get_value("content-length", Hds),
 
     % Cannot update file
     Y2 = maps:without([<<"status">>], F1#{
@@ -1027,29 +1028,18 @@ file_test() ->
     {ok, F3} = kapi_req(#{verb=>update, body=>Y3}),
     #{<<"metadata">> := #{<<"annotations">> := #{<<"ann1">>:=<<"v1">>}}} = F3,
 
-    % Filesystem uses standard downloads
-    {200, #{<<"url">> := Url}} = http_get("/namespaces/a.test.my_actors/files/f1/_rpc/downloadLink"),
-    lager:error("NKLOG URL1 ~p", [Url]),
-    <<"_download">> = lists:last(binary:split(Url, <<"/">>, [global])),
 
     % Send direct to _upload
-    {ok, {{_, 400, _}, _Hds, Body4}} = nkactor_core_test_util:httpc(post, "/namespaces/a.test.my_actors/files/f1/_upload", "ct2", <<"321">>),
-    #{ <<"message">> := <<"Missing field: 'provider'">>} = nklib_json:decode(Body4),
+    {ok, {{_, 400, _}, _Hds, Body4}} = nkactor_core_test_util:httpc(post, "/namespaces/a.test.my_actors/files/_upload", "ct2", <<"321">>),
+    #{<<"message">> := <<"Missing parameter 'provider'">>} = nklib_json:decode(Body4),
     {ok, {{_, 201, _}, _, Body5}} = nkactor_core_test_util:httpc(
         post,
-        "/namespaces/a.test.my_actors/files/_upload?provider=/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1",
+        "/namespaces/a.test.my_actors/files/_upload?name=fs2&provider=/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1",
         "ct2",
         <<"321">>),
     #{
         <<"apiVersion">> := <<"core/v1a1">>,
         <<"kind">> := <<"File">>,
-        <<"metadata">> := #{
-            <<"namespace">> := <<"a.test.my_actors">>,
-            <<"name">> := _,
-            <<"links">> := #{
-                FS1_UID := <<"io.netc.core.file-provider">>
-            }
-        },
         <<"spec">> := #{
             <<"contentType">> := <<"ct2">>,
             <<"externalId">> := <<"files-", _/binary>>,
@@ -1057,6 +1047,13 @@ file_test() ->
             <<"password">> := _,
             <<"provider">> := <<"/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1">>,
             <<"size">> := 3
+        },
+        <<"metadata">> := #{
+            <<"namespace">> := <<"a.test.my_actors">>,
+            <<"name">> := <<"fs2">>,
+            <<"links">> := #{
+                FS1_UID := ?LINK_CORE_FILE_PROVIDER
+            }
         }
     } = nklib_json:decode(Body5),
     Hash2 = base64:encode(crypto:hash(sha256, <<"321">>)),
@@ -1076,7 +1073,7 @@ file_test() ->
         "/namespaces/a.test.my_actors/fileproviders/fs1/files/_upload",
         "ct3",
         <<"321">>),
-    #{spec := #{<<"contentType">>:=<<"ct3">>, <<"hash">>:=Hash2}} = nklib_json:decode(Body7),
+    #{<<"spec">> := #{<<"contentType">>:=<<"ct3">>, <<"hash">>:=Hash2}} = nklib_json:decode(Body7),
     ok.
 
 

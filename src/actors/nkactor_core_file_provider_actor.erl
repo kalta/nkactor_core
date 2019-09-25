@@ -164,12 +164,12 @@ parse(Op, Actor, _Req) ->
 
 %% @doc
 %% Redirect to files, adding parameter
-request(Verb, <<"files/", Rest/binary>>, ActorId, Req) when Verb==create; Verb==upload ->
+request(upload, <<"files">>, ActorId, Req) ->
     Params = maps:get(params, Req, #{}),
     Path = nkactor_lib:actor_id_to_path(ActorId),
     Req2 = Req#{
         resource := ?RES_CORE_FILES,
-        subresource := Rest,
+        subresource := <<>>,
         params := Params#{provider => Path}
     },
     Req3 = maps:remove(name, Req2),

@@ -76,15 +76,15 @@ config() ->
         resource => ?RES_CORE_FILES,
         group => ?GROUP_CORE,
         versions => [<<"v1a1">>],
-        verbs => [create, delete, deletecollection, get, list, update, upload],
+        verbs => [create, delete, deletecollection, get, list, update, download, upload],
         fields_filter => [
-            'spec.name',
+            'spec.external_id',
             'spec.size',
             'spec.content_type',
             'spec.external_id'
         ],
         fields_sort => [
-            'spec.name',
+            'spec.external_id',
             'spec.size',
             'spec.content_type'
         ],
@@ -186,38 +186,47 @@ request(get, <<>>, ActorId, Req) ->
             {error, Error}
     end;
 
+request(download, <<>>, ActorId, _Req) ->
+    case op_get_body(ActorId) of
+        {ok, CT, Body} ->
+            {raw, {CT, Body}};
+        {error, Error} ->
+            {error, Error}
+    end;
+
 request(upload, <<>>, _ActorId, Req) ->
-    Syntax = #{provider=>binary, '__mandatory'=>provider},
+    Syntax = #{name=>nkactor_syntax:name(), provider=>binary, '__mandatory'=>provider},
     case nkactor_lib:parse_request_params(Req, Syntax) of
-        {ok, #{provider:=Provider}} ->
+        {ok, #{provider:=Provider}=Params} ->
             case Req of
                 #{
                     body := Body,
-                    meta := #{nkactor_http_content_type:=CT}
+                    content_type := CT
                 } ->
                     Body2 = #{
-                        spec => #{
-                            content_type => CT,
-                            body_binary => Body,
-                            provider => Provider
+                        data => #{
+                            spec => #{
+                                content_type => CT,
+                                body_binary => Body,
+                                provider => Provider
+                            }
                         }
                     },
                     Req2 = Req#{
                         verb := create,
                         body := Body2
                     },
-                    nkactor:request(Req2);
+                    Req3 = case Params of
+                        #{name:=Name} ->
+                            Req2#{name => Name};
+                        _ ->
+                            Req2
+                    end,
+                    Req4 = maps:remove(content_type, Req3),
+                    nkactor:request(Req4);
                 _ ->
                     {error, request_body_invalid}
             end;
-        {error, Error} ->
-            {error, Error}
-    end;
-
-request(get, <<"_download">>, ActorId, _Req) ->
-    case op_get_body(ActorId) of
-        {ok, CT, Body} ->
-            {raw, {CT, Body}};
         {error, Error} ->
             {error, Error}
     end;
