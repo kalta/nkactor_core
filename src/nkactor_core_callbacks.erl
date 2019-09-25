@@ -25,6 +25,7 @@
 -export([status/1]).
 
 
+status(avatar_not_found)                    -> "Avatar is not found";
 status({email_duplicated, E})              -> {"Duplicated email '~s'", [E]};
 status({file_not_found, F})                -> {"File '~s' not found", [F]};
 status(file_is_invalid)                    -> "File is invalid";
