@@ -24,7 +24,7 @@
 
 -export([api_get_groups/2]).
 -export([actor_kapi_fields_trans/1, actor_kapi_parse/2,
-         actor_kapi_unparse/2, actor_kapi_pre_request/5]).
+         actor_kapi_unparse/2, actor_kapi_pre_request/5, actor_kapi_post_request/5]).
 -include("nkactor_core.hrl").
 
 %% ===================================================================
@@ -104,16 +104,32 @@ actor_kapi_pre_request(update, ?GROUP_CORE, ?RES_CORE_TASKS, <<"_state">>, #{bod
     {ok, Parsed} = nklib_syntax:parse_all(Actor, Syntax),
     {continue, [update, ?GROUP_CORE, ?RES_CORE_TASKS, <<"_state">>, Req#{body:=Parsed}]};
 
-actor_kapi_pre_request(get, ?GROUP_CORE, ?RES_CORE_FILES, <<>>, #{params:=Params}=Req) ->
+actor_kapi_pre_request(get, ?GROUP_CORE, ?RES_CORE_FILES, <<>>, Req) ->
     Syntax = #{
         getBodyInline => {'__key', get_body_inline, boolean}
     },
-    {ok, Params2} = nklib_syntax:parse_all(Params, Syntax),
-    {continue, [update, ?GROUP_CORE, ?RES_CORE_FILES, <<>>, Req#{params:=Params2}]};
+    case nkactor_lib:parse_request_params(Req, Syntax) of
+        {ok, Params2} ->
+            {continue, [update, ?GROUP_CORE, ?RES_CORE_FILES, <<>>, Req#{params:=Params2}]};
+        {error, Error} ->
+            {error, Error, Req}
+    end;
 
 actor_kapi_pre_request(get, ?GROUP_CORE, ?RES_CORE_FILES, <<"_rpc/downloadLink">>, Req) ->
     Req2 = Req#{subresource:=<<"_rpc/download_link">>},
     {continue, [update, ?GROUP_CORE, ?RES_CORE_FILES, <<"_rpc/downloadLink">>, Req2]};
+
+actor_kapi_pre_request(get, ?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS, <<"_rpc/uploadLink">>, Req) ->
+    Syntax = #{
+        contentType => {'__key', content_type, binary}
+    },
+    case nkactor_lib:parse_request_params(Req, Syntax) of
+        {ok, Params2} ->
+            Req2 = Req#{subresource:=<<"_rpc/upload_link">>, params=>Params2},
+            {continue, [get, ?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS, <<"_rpc/uploadLink">>, Req2]};
+        {error, Error} ->
+            {error, Error, Req}
+    end;
 
 actor_kapi_pre_request(_Verb, _Group, _Res, _SubRes, _Req) ->
     continue.
@@ -360,6 +376,39 @@ actor_kapi_unparse(_Group, _Res) ->
 
 
 
-%% ===================================================================
-%% Internal
-%% ===================================================================
+%% @doc Called from nkactor_kapi:request/1 to modify a request reply before
+%% delivering it
+-spec actor_kapi_post_request(nkactor_request:verb(), nkactor:group(), nkactor:resource(),
+    nkactor:subresource(), nkactor_request:reply()) ->
+    nkactor_request:reply().
+
+actor_kapi_post_request(get, ?GROUP_CORE, ?RES_CORE_FILE_PROVIDERS, <<"_rpc/uploadLink">>, {ok, Data, Req}) ->
+    Syntax = #{
+        id => {'__key', <<"id">>},
+        url => {'__key', <<"url">>},
+        method => {'__key', <<"method">>},
+        ttl_secs => {'__key', <<"ttlSecs">>}
+    },
+    {ok, Data2} = nklib_syntax:parse_all(Data, Syntax),
+    Data3 = #{
+        <<"apiVersion">> => ?GROUP_CORE_API_V1A1,
+        <<"kind">> => <<"UploadLink">>,
+        <<"data">> => Data2
+    },
+    {ok, Data3, Req};
+
+actor_kapi_post_request(get, ?GROUP_CORE, ?RES_CORE_FILES, <<"_rpc/downloadLink">>, {ok, Data, Req}) ->
+    Syntax = #{
+        url => {'__key', <<"url">>},
+        ttl_secs => {'__key', <<"ttlSecs">>}
+    },
+    {ok, Data2} = nklib_syntax:parse_all(Data, Syntax),
+    Data3 = #{
+        <<"apiVersion">> => ?GROUP_CORE_API_V1A1,
+        <<"kind">> => <<"DownloadLink">>,
+        <<"data">> => Data2
+    },
+    {ok, Data3, Req};
+
+actor_kapi_post_request(_Verb, _Group, _Res, _SubRes, _Reply) ->
+    continue.

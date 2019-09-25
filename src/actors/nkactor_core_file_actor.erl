@@ -104,6 +104,11 @@ config() ->
 
 
 %% @doc
+%% Provider can be specified as
+%% - core:fileproviders:name.namespace
+%% - name.namespace
+%% - UID
+%% - /apis/core/v1a1/namespaces/../fileproviders/.. (for nkactor_kapi)
 parse(read, _Actor, _Req) ->
     Syntax = #{
         spec => #{
@@ -398,11 +403,14 @@ do_parse_upload(#{external_id:=Id}=Spec, _ProvActorId, ProvSpec, Actor, Req) ->
     #{srv:=SrvId} = Req,
     case nkfile:get_file_meta(SrvId, ProvSpec, Id) of
         {ok, #{content_type:=CT, size:=Size}} ->
-            #{data:=Data} = Actor,
-            Data2 = Data#{spec => Spec#{size => Size, content_type=>CT}},
-            {ok, Actor#{data:=Data2}};
-        %{ok, _} ->
-        %    {error, content_type_invalid};
+            case Spec of
+                #{content_type:=CT0} when CT0 /= CT ->
+                    {error, content_type_invalid};
+                _ ->
+                    #{data:=Data} = Actor,
+                    Data2 = Data#{spec => Spec#{size => Size, content_type=>CT}},
+                    {ok, Actor#{data:=Data2}}
+            end;
         {error, {file_too_large, Id}} ->
             case nkfile:delete(SrvId, ProvSpec, #{name=>Id}) of
                 ok ->

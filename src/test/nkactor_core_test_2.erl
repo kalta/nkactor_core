@@ -52,7 +52,6 @@ all_tests() ->
     ok = auto_activate_test(),
     ok = file_provider_test(),
     ok = file_test(),
-    nkactor_core_test_util:delete_test_data(),
     ok.
 
 
@@ -1062,7 +1061,7 @@ file_test() ->
     {ok, {{_, 400, _}, _, Body6}} =
         nkactor_core_test_util:httpc(
             post,
-            "/namespaces/a.test.my_actors/fileproviders/fs1/files/_upload",
+            "/namespaces/a.test.my_actors/fileproviders/fs1/_upload",
             "ct3",
             <<"4321">>),
     #{<<"reason">> := <<"file_too_large">>} = nklib_json:decode(Body6),
@@ -1070,7 +1069,7 @@ file_test() ->
     % Direct to _upload, but through provider
     {ok, {{_, 201, _}, _, Body7}} = nkactor_core_test_util:httpc(
         post,
-        "/namespaces/a.test.my_actors/fileproviders/fs1/files/_upload",
+        "/namespaces/a.test.my_actors/fileproviders/fs1/_upload",
         "ct3",
         <<"321">>),
     #{<<"spec">> := #{<<"contentType">>:=<<"ct3">>, <<"hash">>:=Hash2}} = nklib_json:decode(Body7),

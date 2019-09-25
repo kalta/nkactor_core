@@ -19,20 +19,17 @@
 %% ------------------------------------------------------------------
 
 %% @doc
--module('nkactor_core_test_3.erl').
+-module(nkactor_core_test_3).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -import(nkactor_core_test_util, [
-        req/1, api_watch/1, wait_api_event/2, api_watch_stop/1,
-        http_get/1, http_post/2, http_put/2,
-        http_delete/1, http_list/1, http_watch/1, wait_http_event/2, http_watch_stop/1,
-        clean_events/0, yaml/1]).
+    req/1, kapi_req/1, api_watch/1, wait_api_event/2, api_watch_stop/1,
+    http_get/1, http_post/2, http_put/2,
+    http_delete/1, http_list/1, http_watch/1, wait_http_event/2, http_watch_stop/1,
+    clean_events/0, yaml/1]).
 
 -compile(export_all).
 -compile(nowarn_export_all).
 
--include("nkdomain.hrl").
--include_lib("nkservice/include/nkservice.hrl").
--include_lib("nkservice/include/nkservice_actor.hrl").
 
 
 %% ===================================================================
@@ -44,20 +41,19 @@
 % create bucket1
 % Use create_test_data before
 file_test_s3() ->
-    nkactor_core_test_util:create_test_data(),
-    req(#{verb=>deletecollection, domain=>"a-nktest", resource=>files}),
-    req(#{verb=>deletecollection, domain=>"a-nktest", resource=>fileproviders}),
+    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>files}),
+    kapi_req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>fileproviders}),
 
     SFP = <<"
         kind: FileProvider
         spec:
-            storageClass: s3
+            storageClass: nkfile_s3
             encryptionAlgo: aes_cfb128
             maxSize: 3
             directDownload: true
-            directDownloadSecs: 1
+            directDownloadSecs: 3
             directUpload: true
-            directUploadSecs: 1
+            directUploadSecs: 3
             s3Config:
                 scheme: http
                 host: localhost
@@ -66,28 +62,28 @@ file_test_s3() ->
                 secret: 'CaK4frX0uixBOh16puEsWEvdjQ3X3RTDvkvE+tUI'
                 bucket: bucket1
                 path: 'a/b'
-
-
         metadata:
             name: fs3
-            domain: a-nktest
+            namespace: a.test.my_actors
     ">>,
 
     % Cannot get and uploadLink if we have encryption or hash
-    {created, _FP2} = req(#{verb=>create, body=>yaml(SFP)}),
-    {500, #{ <<"reason">> :=  <<"storage_class_incompatible">>}} = http_get("/domains/a-nktest/fileproviders/fs3/_rpc/uploadLink?contentType=ct1"),
+    {created, _FP2} = kapi_req(#{verb=>create, body=>yaml(SFP)}),
+    {400, #{ <<"reason">> :=  <<"storage_class_incompatible">>}} = http_get("/namespaces/a.test.my_actors/fileproviders/fs3/_rpc/uploadLink?contentType=ct1"),
 
     % Re-create the fileprovider without encryption
-    {200, _} = http_delete("/domains/a-nktest/fileproviders/fs3"),
+    {200, _} = http_delete("/namespaces/a.test.my_actors/fileproviders/fs3"),
     SFP2 = re:replace(SFP, <<"encryptionAlgo:">>, <<"#encryptionAlgo:">>, [{return, binary}]),
-    {created, _} = req(#{verb=>create, body=>yaml(SFP2)}),
+    {created, _} = kapi_req(#{verb=>create, body=>yaml(SFP2)}),
     % Get an upload link (Url1, Id1) for a file with content-type ct1
 
-    {200, _L}  =
-        http_get("/domains/a-nktest/fileproviders/fs3/_rpc/uploadLink?contentType=ct1"),
-
-    {200, #{<<"method">>:=<<"PUT">>, <<"url">>:=Url1, <<"id">>:=Id1, <<"ttlSecs">>:=1}} =
-        http_get("/domains/a-nktest/fileproviders/fs3/_rpc/uploadLink?contentType=ct1"),
+    {200, L1} = http_get("/namespaces/a.test.my_actors/fileproviders/fs3/_rpc/uploadLink?contentType=ct1"),
+    #{
+        <<"kind">> := <<"UploadLink">>,
+        <<"data">> := #{
+            <<"method">>:=<<"PUT">>, <<"url">>:=Url1, <<"id">>:=Id1, <<"ttlSecs">>:=3
+        }
+    } = L1,
     {_, 13} = binary:match(Url1, <<"/bucket1/a/b/">>),
 
     % Upload a file too large
@@ -99,42 +95,48 @@ file_test_s3() ->
         spec:
             contentType: ct2
             externalId: ", Id1/binary, "
+            provider: fs3.a.test.my_actors
         metadata:
             name: file3
     ">>,
-   {400, #{<<"reason">>:=<<"file_too_large">>}} = http_post("/domains/a-nktest/fileproviders/fs3/files", yaml(F1)),
+    {400, #{<<"reason">>:=<<"file_too_large">>}} = http_post("/namespaces/a.test.my_actors/files", yaml(F1)),
 
     % Upload a new file (with content type ct1) , and then create the file object. Content-Type must match.
     {ok, 200, _, _Body} = hackney:request(<<"PUT">>, Url1, [{<<"content-type">>, <<"ct1">>}], <<"123">>, [with_body]),
-    {400, #{<<"reason">>:=<<"content_type_invalid">>}} = http_post("/domains/a-nktest/fileproviders/fs3/files", yaml(F1)),
+    {400, #{<<"reason">>:=<<"content_type_invalid">>}} = http_post("/namespaces/a.test.my_actors/files", yaml(F1)),
 
 
-    F2 = re:replace(F1, <<"ct2">>, <<"ct1">>, [{return, binary}]),
-    {201, F3} = http_post("/domains/a-nktest/fileproviders/fs3/files", yaml(F2)),
+    F1b = re:replace(F1, <<"ct2">>, <<"ct1">>, [{return, binary}]),
+    % Different format for provider
+    F1c = re:replace(F1b, <<"fs3.a.test.my_actors">>, <<"core:fileproviders:fs3.a.test.my_actors">>, [{return, binary}]),
+    {201, F3} = http_post("/namespaces/a.test.my_actors/files", yaml(F1c)),
     #{
-        spec := #{
+        <<"spec">> := #{
             <<"externalId">> := Id1,
-            <<"provider">> := <<"/apis/core/v1a1/domains/a-nktest/fileproviders/fs3">>,
+            <<"provider">> := <<"core:fileproviders:fs3.a.test.my_actors">>,
             <<"contentType">> := <<"ct1">>,
             <<"size">> := 3
         } = SpecF3
     } = F3,
     false = maps:is_key(<<"bodyBase64">>, SpecF3),
-    {200, F3} = http_get("/domains/a-nktest/files/file3"),
-    {200, F4} = http_get("/domains/a-nktest/files/file3?getBodyInline=true"),
-    #{spec:=#{<<"bodyBase64">>:=Base64Body}} =F4,
+    {200, F3} = http_get("/namespaces/a.test.my_actors/files/file3"),
+    {200, F4} = http_get("/namespaces/a.test.my_actors/files/file3?getBodyInline=true"),
+    #{<<"spec">>:=#{<<"bodyBase64">>:=Base64Body}} =F4,
     Base64Body = base64:encode(<<"123">>),
-    {ok, {{_, 200, _}, Hds1, "123"}} = nkactor_core_test_util:httpc("/domains/a-nktest/files/file3/_download"),
+    {ok, {{_, 200, _}, Hds1, "123"}} = nkactor_core_test_util:httpc("/namespaces/a.test.my_actors/files/file3/_download"),
     "ct1" = nklib_util:get_value("content-type", Hds1),
 
     % Get a download link
-    {200, #{<<"url">>:=Url2, <<"ttlSecs">>:=1}} =
-        nkactor_core_test_util:http_get("/domains/a-nktest/files/file3/_rpc/downloadLink"),
+    {200, DL1} = nkactor_core_test_util:http_get("/namespaces/a.test.my_actors/files/file3/_rpc/downloadLink"),
+    #{
+        <<"kind">> := <<"DownloadLink">>,
+        <<"data">> := #{<<"url">>:=Url2, <<"ttlSecs">>:=3}
+    } = DL1,
     {ok, {{_, 200, _}, Hds2, "123"}} = httpc:request(binary_to_list(Url2)),
     "ct1" = nklib_util:get_value("content-type", Hds2),
 
     % Links should have been expired
-    timer:sleep(2100),
+    timer:sleep(4100),
     {ok, 403, _, Exp1} = hackney:request(<<"PUT">>, Url1, [{<<"content-type">>, <<"ct1">>}], <<"432">>, [with_body]),
     {_, 19} = binary:match(Exp1, <<"Request has expired">>),
     {ok, 403, _, Exp2} = hackney:request(get, Url2, [], <<>>, [with_body]),
@@ -144,7 +146,7 @@ file_test_s3() ->
 
 
 cb_event() ->
-    req(#{verb=>deletecollection, domain=>"a-nktest", resource=>sessions}),
+    req(#{verb=>deletecollection, namespace=>"a.test.my_actors", resource=>sessions}),
 
     SFP = <<"
         kind: Session
@@ -153,7 +155,7 @@ cb_event() ->
         metadata:
             name: sess1
             callbackUrl: http://127.0.0.1:9001/_test
-            domain: a-nktest
+            namespace: a.test.my_actors
     ">>,
     {created, _} = req(#{verb=>create, body=>yaml(SFP)}),
     ok.

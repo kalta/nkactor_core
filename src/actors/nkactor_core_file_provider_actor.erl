@@ -164,16 +164,32 @@ parse(Op, Actor, _Req) ->
 
 %% @doc
 %% Redirect to files, adding parameter
-request(upload, <<"files">>, ActorId, Req) ->
+request(upload, <<>>, ActorId, Req) ->
     Params = maps:get(params, Req, #{}),
     Path = nkactor_lib:actor_id_to_path(ActorId),
     Req2 = Req#{
         resource := ?RES_CORE_FILES,
-        subresource := <<>>,
         params := Params#{provider => Path}
     },
     Req3 = maps:remove(name, Req2),
-    nkactor:request(Req3);
+    nkactor_core_file_actor:request(upload, <<>>, none, Req3);
+
+%%%% Allow operations on /fileproviders/fp/files/... to be redirected to files
+%%request(_Verb, <<"files", Rest/binary>>, ActorId, Req) ->
+%%    lager:error("NKLOG CALL2 ~p", []),
+%%    SubRes = case Rest of
+%%        <<"/", Rest2/binary>> -> Rest2;
+%%    end,
+%%
+%%    Params = maps:get(params, Req, #{}),
+%%    Path = nkactor_lib:actor_id_to_path(ActorId),
+%%    Req2 = Req#{
+%%        resource := ?RES_CORE_FILES,
+%%        subresource := Rest,
+%%        params := Params#{provider => Path}
+%%    },
+%%    Req3 = maps:remove(name, Req2),
+%%    nkactor:request(Req3);
 
 request(get, <<"_rpc/upload_link">>, ActorId, Req) ->
     Syntax = #{content_type => binary, '__mandatory'=>content_type},
@@ -191,20 +207,6 @@ request(get, <<"_rpc/upload_link">>, ActorId, Req) ->
 
 request(_Verb, _Path, _ActorId, _Req) ->
     continue.
-
-
-%%%% @doc
-%%make_external(_SrvId, #actor{data=Data}=Actor, _Vsn) ->
-%%    % This function can be called with 'fake' empty actors
-%%    Spec = maps:get(spec, Data, #{}),
-%%    case maps:find(<<"s3_config">>, Spec) of
-%%        {ok, SpecS3} ->
-%%            SpecS3B = SpecS3#{<<"secret">>=><<>>},
-%%            Spec2 = Spec#{<<"s3_config">>:=SpecS3B},
-%%            {ok, Actor#actor{data=Data#{spec:=Spec2}}};
-%%        _ ->
-%%            {ok, Actor}
-%%    end.
 
 
 %% @doc
