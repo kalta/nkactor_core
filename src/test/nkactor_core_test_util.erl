@@ -42,8 +42,10 @@
 
 start() ->
     PgSqlConfig = #{
-        targets => [#{url=>"tcp://root@127.0.0.1:26257", pool=>10}],
-        flavour => cockroachdb,
+%%        targets => [#{url=>"tcp://root@127.0.0.1:26257", pool=>10}],
+%%        flavour => cockroachdb,
+        targets => [#{url=>"tcp://carlosj@127.0.0.1:5432", pool=>10}],
+        flavour => postgresql,
         database => nkactor_test,
         debug => true,
         plugins => [nkserver_ot],
