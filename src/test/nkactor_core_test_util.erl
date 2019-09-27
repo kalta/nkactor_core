@@ -33,7 +33,7 @@
 -define(NAMESPACE, <<"test.my_actors">>).
 -define(TOKEN, <<"my_token">>).
 
--define(LISTEN, "http://127.0.0.1:9001").
+-define(LISTEN, "http://127.0.0.1:9010").
 
 
 %% ===================================================================
