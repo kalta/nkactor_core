@@ -21,6 +21,7 @@
 %% @doc NkActor User Actor
 -module(nkactor_core_lib).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
+-export([update_roles/1]).
 -export([create_linked_user/1, update_linked_user_password/3, update_linked_user_password/2,
          update_linked_user_login/2, delete_linked_user/2]).
 
@@ -38,6 +39,66 @@
 
 
 %% ===================================================================
+
+update_roles([]) ->
+    ok;
+
+update_roles([Role|Rest]) ->
+    Syntax = #{
+        uid => binary,
+        namespace => binary,
+        password => binary,
+        roles => {list, #{
+            role => binary,
+            namespace => binary,
+            deep => binary,
+            '__mandatory' => [role],
+            '__defaults' => #{namespace => <<>>, deep=>false}
+        }},
+        '__mandatory' => [uid, namespace, password, roles]
+    },
+    case nklib_syntax:parse(Role, Syntax) of
+        {ok, #{uid:=UID, namespace:=Ns, password:=Pass, roles:=Roles}, _} ->
+            User = #{
+                group => ?GROUP_CORE,
+                resource => ?RES_CORE_USERS,
+                namespace => Ns,
+                data => #{
+                    spec => #{
+                        password => Pass,
+                        roles => Roles
+                    }
+                }
+            },
+            case nkactor:update(UID, User, #{}) of
+                {error, actor_not_found} ->
+                    case nkactor:create(User, #{forced_uid=>UID}) of
+                        {ok, _} ->
+                            lager:error("NKLOG ACTOR CREATED");
+                        {error, Error} ->
+                            lager:error("Could not create role ~s: ~p", [UID, Error])
+                    end;
+                {ok, _} ->
+                    lager:error("NKLOG ACTOR UPDATED")
+            end,
+            update_roles(Rest);
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 %% @doc Creates an user linked to another actor
 %% Actor must use the fields:

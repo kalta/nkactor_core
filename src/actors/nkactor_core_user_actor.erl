@@ -24,8 +24,8 @@
 
 -behavior(nkactor_actor).
 
--export([find_id/3]).
--export([op_check_pass/2]).
+-export([find_id/3, write_pass/2]).
+-export([op_check_pass/2, op_has_role/3, op_add_role/4, op_del_role/3]).
 -export([config/0, parse/3, get/2, request/4, init/2, update/2, sync_op/3]).
 -export([store_pass/1]).
 
@@ -50,6 +50,11 @@ find_id(SrvId, Namespace, Id) ->
     end.
 
 
+write_pass(Pass, File) ->
+    file:write_file(File, store_pass(Pass)).
+
+
+
 %% ===================================================================
 %% External
 %% ===================================================================
@@ -62,6 +67,15 @@ op_check_pass(UserId, Pass) ->
             {error, Error}
     end.
 
+op_has_role(UserId, Role, Namespace) ->
+    nkactor:sync_op(UserId, {nkactor_has_role, to_bin(Role), to_bin(Namespace)}).
+
+
+op_add_role(UserId, Role, Namespace, Deep) when is_boolean(Deep)->
+    nkactor:sync_op(UserId, {nkactor_add_role, to_bin(Role), to_bin(Namespace), Deep}).
+
+op_del_role(UserId, Role, Namespace) ->
+    nkactor:sync_op(UserId, {nkactor_del_role, to_bin(Role), to_bin(Namespace)}).
 
 
 %% ===================================================================
@@ -91,14 +105,22 @@ config() ->
 
 %% @doc
 parse(_Op, _Actor, _Req) ->
-    Fun = fun(Pass) ->
+    PassFun = fun(Pass) ->
         StoredPass = store_pass(Pass),
         {ok, StoredPass}
     end,
     Spec = #{
-        login => binary,
+        login => text,
         member => binary,
-        password => Fun
+        password => PassFun,
+        roles => {list, #{
+            role => text,
+            namespace => binary,
+            deep => boolean,
+            '__mandatory' => [role],
+            '__defaults' => #{namespace=><<>>, deep=>true}
+        }}
+
     },
     {syntax, <<"v1a1">>, #{spec=>Spec}}.
 
@@ -169,6 +191,35 @@ sync_op({nkactor_check_pass, Pass}, _From, ActorSt) ->
     Result =  {ok, Valid},
     {reply, Result, ActorSt};
 
+sync_op({nkactor_has_role, Role, Namespace}, _From, ActorSt) ->
+    Reply = do_has_role(Role, Namespace, check, ActorSt),
+    {reply, Reply, ActorSt};
+
+sync_op({nkactor_add_role, Role, Namespace, Deep}, _From, ActorSt) ->
+    ActorSt2 = case do_has_role(Role, Namespace, Deep, ActorSt) of
+        true ->
+            ActorSt;
+        false ->
+            lager:error("NKLOG NO HAS1"),
+            S3 = do_del_role(Role, Namespace, ActorSt),
+            lager:error("NKLOG NO HAS2: ~p", [S3#actor_st.actor]),
+            S4 = do_add_role(Role, Namespace, Deep, S3),
+            lager:error("NKLOG NO HAS3: ~p", [S4#actor_st.actor]),
+            S4
+    end,
+    {reply, ok, ActorSt2};
+
+sync_op({nkactor_del_role, Role, Namespace}, _From, ActorSt) ->
+    ActorSt2 = case do_has_role(Role, Namespace, any, ActorSt) of
+        true ->
+            lager:error("NKLOG T"),
+            do_del_role(Role, Namespace, ActorSt);
+        false ->
+            lager:error("NKLOG F"),
+            ActorSt
+    end,
+    {reply, ok, ActorSt2};
+
 sync_op(_Op, _From, _ActorSt) ->
     continue.
 
@@ -205,6 +256,80 @@ add_label(#{data:=#{spec:=#{login:=Login}}}=Actor) ->
 
 add_label(ActorSt) ->
     ActorSt.
+
+
+%% @private
+do_has_role(Role, Namespace, Deep, #actor_st{actor=#{data:=#{spec:=Spec}}}) ->
+    Roles = maps:get(roles, Spec, []),
+    do_has_role2(Roles, Role, Namespace, Deep).
+
+
+%% @private
+do_has_role2([], _Role, _Ns2, _Deep2) ->
+    false;
+
+do_has_role2([#{role:=Role, namespace:=Ns, deep:=Deep}|Rest], Role, Ns2, Deep2) ->
+    case {Ns, Deep, Deep2} of
+        {Ns2, _, check} ->
+            % Same role, same NS, we wanted to only to check
+            true;
+        {_, false, check} ->
+            % Same role, another namespace, no deep
+            do_has_role2(Rest, Role, Ns2, Deep2);
+        {<<>>, true, check} ->
+            % Base namespace, deep is true
+            true;
+        {_, true, check} ->
+            % Different namespace, but deep. Let's see
+            case binary:split(Ns2, Ns) of
+                [_, <<>>] ->
+                    % Ns was at the end
+                    true;
+                _ ->
+                    do_has_role2(Rest, Role, Ns2, Deep2)
+            end;
+        {Ns2, Deep2, Deep2} ->
+            % Same role, namespace and deep
+            true;
+        {Ns2, _, any} ->
+            % Same role, namespace and we don't care deep
+            true;
+        _ ->
+            lager:error("NKLOG NOTHING ~p ~p", [{Ns, Deep, Deep2}]),
+            do_has_role2(Rest, Role, Ns2, Deep2)
+    end;
+
+do_has_role2([_|Rest], Role, Ns2, Deep2) ->
+    do_has_role2(Rest, Role, Ns2, Deep2).
+
+
+
+%% @private
+do_del_role(Role, Namespace, #actor_st{actor=#{data:=#{spec:=Spec}=Data}=Actor}=ActorSt) ->
+    Roles1 = maps:get(roles, Spec, []),
+    Roles2 = do_del_role(Roles1, Role, Namespace, []),
+    Actor2 = Actor#{data:=Data#{spec:=Spec#{roles=>Roles2}}},
+    ActorSt#actor_st{actor=Actor2, is_dirty=true}.
+
+
+%% @private
+do_del_role([], _Role, _Ns, Acc) ->
+    lists:reverse(Acc);
+
+do_del_role([#{role:=Role, namespace:=Ns}|Rest], Role, Ns, Acc) ->
+    do_del_role(Rest, Role, Ns, Acc);
+
+do_del_role([RoleData|Rest], Role, Ns, Acc) ->
+    do_del_role(Rest, Role, Ns, [RoleData|Acc]).
+
+
+%% @private
+do_add_role(Role, Namespace, Deep, #actor_st{actor=#{data:=#{spec:=Spec}=Data}=Actor}=ActorSt) ->
+    Roles1 = maps:get(roles, Spec, []),
+    Roles2 = [#{role=>Role, namespace=>Namespace, deep=>Deep}|Roles1],
+    Actor2 = Actor#{data:=Data#{spec:=Spec#{roles=>Roles2}}},
+    ActorSt#actor_st{actor=Actor2, is_dirty=true}.
+
 
 
 %% @private
