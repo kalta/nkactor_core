@@ -24,8 +24,8 @@
 
 -behavior(nkactor_actor).
 
--export([find_id/3, write_pass/2]).
--export([op_check_pass/2, op_has_role/3, op_add_role/4, op_del_role/3]).
+-export([find_id/3, write_pass/2, has_role/3]).
+-export([op_check_pass/2, op_has_role/3, op_get_roles/1, op_add_role/4, op_del_role/3]).
 -export([config/0, parse/3, get/2, request/4, init/2, update/2, sync_op/3]).
 -export([store_pass/1]).
 
@@ -36,6 +36,13 @@
 -define(MAGIC_PASS, <<226,141,134,226,132,153,226,141,133>>). %%  "⍆ℙ⍅"/utf8
 -define(INVALID_PASS_SLEEP, 250).
 -define(LABEL_ID, <<"login-user.core.netc.io">>).
+
+%% ===================================================================
+%% Types
+%% ===================================================================
+
+-type roles() :: [#{role:=binary(), namespace:=binary(), deep=>boolean()}].
+
 
 %% ===================================================================
 %% API
@@ -49,10 +56,14 @@ find_id(SrvId, Namespace, Id) ->
             Other
     end.
 
+%% @doc
+has_role(Role, Namespace, Roles) ->
+    do_has_role2(Roles, to_bin(Role), to_bin(Namespace), check).
 
+
+%% @doc
 write_pass(Pass, File) ->
     file:write_file(File, store_pass(Pass)).
-
 
 
 %% ===================================================================
@@ -71,8 +82,15 @@ op_has_role(UserId, Role, Namespace) ->
     nkactor:sync_op(UserId, {nkactor_has_role, to_bin(Role), to_bin(Namespace)}).
 
 
+-spec op_get_roles(nkactor:id()) -> {ok, roles()} | {error, term()}.
+
+op_get_roles(UserId) ->
+    nkactor:sync_op(UserId, nkactor_get_roles).
+
+
 op_add_role(UserId, Role, Namespace, Deep) when is_boolean(Deep)->
     nkactor:sync_op(UserId, {nkactor_add_role, to_bin(Role), to_bin(Namespace), Deep}).
+
 
 op_del_role(UserId, Role, Namespace) ->
     nkactor:sync_op(UserId, {nkactor_del_role, to_bin(Role), to_bin(Namespace)}).
@@ -191,9 +209,13 @@ sync_op({nkactor_check_pass, Pass}, _From, ActorSt) ->
     Result =  {ok, Valid},
     {reply, Result, ActorSt};
 
+sync_op(nkactor_get_roles, _From, #actor_st{actor=#{data:=#{spec:=Spec}}}=ActorSt) ->
+    Roles = maps:get(roles, Spec, []),
+    {reply, {ok, Roles}, ActorSt};
+
 sync_op({nkactor_has_role, Role, Namespace}, _From, ActorSt) ->
     Reply = do_has_role(Role, Namespace, check, ActorSt),
-    {reply, Reply, ActorSt};
+    {reply, {ok, Reply}, ActorSt};
 
 sync_op({nkactor_add_role, Role, Namespace, Deep}, _From, ActorSt) ->
     ActorSt2 = case do_has_role(Role, Namespace, Deep, ActorSt) of

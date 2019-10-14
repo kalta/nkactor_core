@@ -74,30 +74,17 @@ update_roles([Role|Rest]) ->
                 {error, actor_not_found} ->
                     case nkactor:create(User, #{forced_uid=>UID}) of
                         {ok, _} ->
-                            lager:error("NKLOG ACTOR CREATED");
+                            ok;
                         {error, Error} ->
                             lager:error("Could not create role ~s: ~p", [UID, Error])
                     end;
                 {ok, _} ->
-                    lager:error("NKLOG ACTOR UPDATED")
+                    ok
             end,
             update_roles(Rest);
         {error, Error} ->
             {error, Error}
     end.
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 %% @doc Creates an user linked to another actor
