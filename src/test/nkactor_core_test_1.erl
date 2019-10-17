@@ -121,7 +121,7 @@ basic_test() ->
     {status, password_invalid} = req(#{verb=>get, resource=>users, name=>ut1, subresource=>"_rpc/checkpass", params=>#{password=>"pass2"}}),
 
     % We cannot create it again
-    {error, uniqueness_violation} = req(#{verb=>create, resource=>users, name=>"ut1", body=>U1}),
+    {error, {actor_already_exists, _}} = req(#{verb=>create, resource=>users, name=>"ut1", body=>U1}),
 
 
     % The actor is loaded
@@ -917,7 +917,7 @@ contact_test() ->
         }=Meta1
     } = CT1,
 
-    {error, #{<<"reason">>:= <<"uniqueness_violation">>}} = kapi_req(#{verb=>create, body=>Body2}),
+    {error, #{<<"reason">>:= <<"actor_already_exists">>}} = kapi_req(#{verb=>create, body=>Body2}),
 
     Spec2 = maps:remove(<<"im">>, Spec1),
     Meta2 = maps:without([<<"creationTime">>, <<"updateTime">>, <<"generation">>, <<"resourceVersion">>, <<"uid">>], Meta1),

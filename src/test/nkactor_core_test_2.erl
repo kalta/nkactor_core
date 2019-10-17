@@ -140,9 +140,9 @@ access_id_test() ->
     {ok, ID3} = kapi_req(#{verb=>update, body=>ID3}),
 
     ID3c = ID3#{<<"metadata">>:=Meta3#{<<"uid">>:=<<"1">>}},
-    {error, #{<<"message">>:=<<"Updated invalid field 'uid'">>}} = kapi_req(#{verb=>update, body=>ID3c}),
+    {error, #{<<"message">>:=<<"Updated static field 'uid'">>}} = kapi_req(#{verb=>update, body=>ID3c}),
     ID3d = ID3#{<<"metadata">>:=Meta3#{<<"generation">>:=25}},
-    {error, #{<<"message">>:=<<"Updated invalid field 'metadata.generation'">>}} = kapi_req(#{verb=>update, body=>ID3d}),
+    {error, #{<<"message">>:=<<"Updated static field 'metadata.generation'">>}} = kapi_req(#{verb=>update, body=>ID3d}),
 
     % UPDATE NAME / NAMESPACE
     B4 = yaml(<<"
@@ -933,10 +933,10 @@ file_provider_test() ->
     {created, _FP2} = kapi_req(#{verb=>create, body=>yaml(SFP2)}),
 
     SFP3 = re:replace(SFP2, <<"bucket: bucket1">>, <<"bucket: bucket2">>, [{return, binary}]),
-    {error, #{<<"message">>:=<<"Updated invalid field 'spec.s3Config.bucket'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP3)}),
+    {error, #{<<"message">>:=<<"Updated static field 'spec.s3Config.bucket'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP3)}),
 
     SFP4 = re:replace(SFP2, <<"encryptionAlgo:">>, <<"#encryptionAlgo:">>, [{return, binary}]),
-    {error, #{<<"message">>:=<<"Updated invalid field 'spec.encryptionAlgo'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP4)}),
+    {error, #{<<"message">>:=<<"Updated static field 'spec.encryptionAlgo'">>}} = kapi_req(#{verb=>update, body=>yaml(SFP4)}),
 
     SFP5 = re:replace(SFP2, <<"host: localhost">>, <<"host: 127.0.0.1">>, [{return, binary}]),
     {ok, #{<<"spec">>:=#{<<"s3Config">>:=#{<<"host">>:=<<"127.0.0.1">>}}}} = kapi_req(#{verb=>update, body=>yaml(SFP5)}),
@@ -1012,7 +1012,7 @@ file_test() ->
             <<"contentType">> := <<"type2">>
         }
     }),
-    {error, #{ <<"message">>:=<<"Updated invalid field 'spec.contentType'">>}} =
+    {error, #{ <<"message">>:=<<"Updated static field 'spec.contentType'">>}} =
         kapi_req(#{verb=>update, namespace=>"a.test.my_actors", name=>f1, body=>Y2}),
 
     % But can add annotations, etc.
@@ -1031,6 +1031,7 @@ file_test() ->
     % Send direct to _upload
     {ok, {{_, 400, _}, _Hds, Body4}} = nkactor_core_test_util:httpc(post, "/namespaces/a.test.my_actors/files/_upload", "ct2", <<"321">>),
     #{<<"message">> := <<"Missing parameter 'provider'">>} = nklib_json:decode(Body4),
+    lager:error("NKLOG CALL HTTP"),
     {ok, {{_, 201, _}, _, Body5}} = nkactor_core_test_util:httpc(
         post,
         "/namespaces/a.test.my_actors/files/_upload?name=fs2&provider=/apis/core/v1a1/namespaces/a.test.my_actors/fileproviders/fs1",
