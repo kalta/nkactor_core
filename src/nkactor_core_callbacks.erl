@@ -31,7 +31,7 @@ status({file_not_found, F})                -> {"File '~s' not found", [F]};
 status(file_is_invalid)                    -> "File is invalid";
 status(file_too_large)                     -> "File is too large";
 status({label_not_found, L})               -> {"Label not found: '~s'", [L]};
-status({login_exists, L, U})               -> {"Login '~s' already exists: '~s'", [L, U]};
+status({login_exists, L})                  -> {"Login '~s' already exists", [L]};
 status({login_unknown, L})                 -> {"Login unknown: '~s'", [L]};
 status(provider_class_unknown)             -> "Provider class is unknown";
 status(token_invalid)                      -> "Invalid token";

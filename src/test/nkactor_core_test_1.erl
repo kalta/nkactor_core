@@ -121,7 +121,7 @@ basic_test() ->
     {status, password_invalid} = req(#{verb=>get, resource=>users, name=>ut1, subresource=>"_rpc/checkpass", params=>#{password=>"pass2"}}),
 
     % We cannot create it again
-    {error, {actor_already_exists, _}} = req(#{verb=>create, resource=>users, name=>"ut1", body=>U1}),
+    {error, actor_already_exists} = req(#{verb=>create, resource=>users, name=>"ut1", body=>U1}),
 
 
     % The actor is loaded

@@ -123,8 +123,8 @@ create_linked_user(Actor) ->
                     Actor3 = nkactor_lib:rm_links(Actor2, ?LINK_MEMBER_USER),
                     Actor4 = nkactor_lib:add_link(UserUID, Actor3, ?LINK_MEMBER_USER),
                     {ok, Actor4};
-                {error, {actor_already_exists, UID}} ->
-                    {error, {login_exists, Login, UID}};
+                {error, actor_already_exists} ->
+                    {error, {login_exists, Login}};
                 {error, Error} ->
                     {error, {user_creation, Error}}
             end;
