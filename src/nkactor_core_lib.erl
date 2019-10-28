@@ -22,8 +22,8 @@
 -module(nkactor_core_lib).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -export([update_roles/1]).
--export([create_linked_user/1, update_linked_user_password/3, update_linked_user_password/2,
-         update_linked_user_login/2, delete_linked_user/2]).
+-export([maybe_create_linked_user/1, update_linked_user_password/3, update_linked_user_password/2,
+         maybe_update_linked_user_login/2, maybe_delete_linked_user/2]).
 
 -include_lib("nkactor/include/nkactor.hrl").
 -include_lib("nkactor/include/nkactor_debug.hrl").
@@ -95,8 +95,11 @@ update_roles([Role|Rest]) ->
 %% - The name of user is a hash of the login
 %% - Field 'user_uid' is added to caller status field
 %% - The caller actor is linked to the created user
-create_linked_user(Actor) ->
+maybe_create_linked_user(Actor) ->
     case Actor of
+        #{data:=#{status:=#{user_uid:=_}}} ->
+            % Id field status.user_uid is already present, do nothing
+            {ok, Actor};
         #{data:=#{spec:=#{login:=Login}}=Data} when Login /= <<>> ->
             #{uid := UID, namespace := ActorNamespace} = Actor,
             Name = nklib_util:to_lower(nklib_util:lhash(Login)),
@@ -167,7 +170,7 @@ update_linked_user_password(Pass, Actor) ->
 
 
 %% @doc
-update_linked_user_login(NewActor, #actor_st{actor=OldActor}=ActorSt) ->
+maybe_update_linked_user_login(NewActor, #actor_st{actor=OldActor}=ActorSt) ->
     #{data:=#{spec:=NewSpec}} = NewActor,
     #{data:=#{spec:=OldSpec}} = OldActor,
     OldLogin = maps:get(login, OldSpec, <<>>),
@@ -176,7 +179,7 @@ update_linked_user_login(NewActor, #actor_st{actor=OldActor}=ActorSt) ->
         true ->
             {ok, ActorSt#actor_st{actor=NewActor}};
         false ->
-            ActorSt3 = case delete_linked_user(NewActor, ActorSt) of
+            ActorSt3 = case maybe_delete_linked_user(NewActor, ActorSt) of
                 {ok, ActorSt2} ->
                     ActorSt2;
                 {error, DeleteError} ->
@@ -189,7 +192,7 @@ update_linked_user_login(NewActor, #actor_st{actor=OldActor}=ActorSt) ->
                     {ok, ActorSt3};
                 _ ->
                     #actor_st{actor=Actor3} = ActorSt3,
-                    case create_linked_user(Actor3) of
+                    case maybe_create_linked_user(Actor3) of
                         {ok, Actor4} ->
                             {ok, ActorSt3#actor_st{actor=Actor4}};
                         {error, CreateError} ->
@@ -205,7 +208,7 @@ update_linked_user_login(NewActor, #actor_st{actor=OldActor}=ActorSt) ->
 %% after that the user can be removed
 %% If NewAc
 
-delete_linked_user(Actor, #actor_st{actor=OldActor}=ActorSt) ->
+maybe_delete_linked_user(Actor, #actor_st{actor=OldActor}=ActorSt) ->
     % Use the old actor to delete the old user
     case OldActor of
         #{data:=#{status:=#{user_uid:=UserUID}}} ->
