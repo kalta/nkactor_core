@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, request/4, init/2, update/2, event/2,
+-export([config/0, parse/3, request/4, init/2, update/3, event/2,
          sync_op/3, async_op/2, expired/2]).
 -export_type([event/0]).
 
@@ -154,7 +154,7 @@ init(_Op, #actor_st{actor=#{data:=Data, metadata:=#{expire_time:=_}}=Actor}=Acto
     end.
 
 
-update(Actor, ActorSt) ->
+update(Actor, _Opts, ActorSt) ->
     set_auto_activate(true, ActorSt#actor_st{actor=Actor}).
 
 

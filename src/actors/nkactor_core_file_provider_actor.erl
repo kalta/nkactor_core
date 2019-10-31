@@ -32,7 +32,7 @@
 -export([op_get_spec/1, op_get_direct_download_link/2, op_get_upload_link/2,
          op_get_file_meta/2]).
 %%-export([link_to_provider/3]).
--export([config/0, parse/3, request/4, init/2, update/2, sync_op/3]).
+-export([config/0, parse/3, request/4, init/2, update/3, sync_op/3]).
 -export_type([run_state/0]).
 
 
@@ -215,7 +215,7 @@ init(_Op, #actor_st{actor=Actor}=ActorSt) ->
 
 
 %% @doc
-update(NewActor, ActorSt) ->
+update(NewActor, _Opts, ActorSt) ->
     case set_spec_cache(NewActor, ActorSt) of
         {ok, ActorSt2} ->
             {ok, NewActor, ActorSt2};

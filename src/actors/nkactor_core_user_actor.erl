@@ -26,7 +26,7 @@
 
 -export([find_id/3, write_pass/2, has_role/3]).
 -export([op_check_pass/2, op_has_role/3, op_get_roles/1, op_add_role/4, op_del_role/3]).
--export([config/0, parse/3, get/2, request/4, init/2, update/2, sync_op/3]).
+-export([config/0, parse/3, get/2, request/4, init/2, update/3, sync_op/3]).
 -export([store_pass/1]).
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -193,7 +193,7 @@ get(Actor, ActorSt) ->
 
 %% @doc
 %% We don't really support updating the login through standard updated
-update(Actor, ActorSt) ->
+update(Actor, _Opts, ActorSt) ->
     {ok, add_label(Actor), ActorSt}.
 
 

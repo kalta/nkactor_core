@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, init/2, update/2]).
+-export([config/0, parse/3, init/2, update/3]).
 
 -include("nkactor_core.hrl").
 -include_lib("nkactor/include/nkactor.hrl").
@@ -168,7 +168,7 @@ init(start, ActorSt) ->
 
 
 %% @doc
-update(Actor, ActorSt) ->
+update(Actor, _Opts, ActorSt) ->
     case add_user_link(Actor) of
         {ok, Actor2} ->
             {ok, Actor2, ActorSt};
