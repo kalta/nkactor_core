@@ -21,7 +21,7 @@
 %% @doc NkActor User Actor
 -module(nkactor_core_lib).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
--export([update_roles/1]).
+-export([update_users/2]).
 -export([maybe_create_linked_user/1, update_linked_user_password/3, update_linked_user_password/2,
          maybe_update_linked_user_login/2, maybe_delete_linked_user/2]).
 
@@ -40,12 +40,38 @@
 
 %% ===================================================================
 
-update_roles([]) ->
+%% ===================================================================
+%% Types
+%% ===================================================================
+
+-type role() :: binary().
+
+-type user() ::
+    #{
+        uid := nkactor:uid(),
+        login => binary(),
+        namespace := nkactor:namespace(),
+        password := binary(),
+        roles => [
+            #{
+                role := role(),
+                namespace => nkactor:namespace(),
+                deep => boolean()
+            }
+        ]
+    }.
+
+
+%% @doc Creates a number of users, with a
+-spec update_users(nkserver:id(), [user()]) ->
+    ok | {error, term()}.
+
+update_users(_SrvId, []) ->
     ok;
 
-update_roles([Role|Rest]) ->
+update_users(SrvId, [User|Rest]) ->
     Syntax = #{
-        uid => binary,
+        login => text,
         namespace => binary,
         password => binary,
         roles => {list, #{
@@ -55,33 +81,41 @@ update_roles([Role|Rest]) ->
             '__mandatory' => [role],
             '__defaults' => #{namespace => <<>>, deep=>false}
         }},
-        '__mandatory' => [uid, namespace, password, roles]
+        '__mandatory' => [login, namespace, password, roles]
     },
-    case nklib_syntax:parse(Role, Syntax) of
-        {ok, #{uid:=UID, namespace:=Ns, password:=Pass, roles:=Roles}, _} ->
-            User = #{
+    case nklib_syntax:parse(User, Syntax) of
+        {ok, #{login:=Login, namespace:=Ns, password:=Pass, roles:=Roles}, _} ->
+            User2 = #{
                 group => ?GROUP_CORE,
                 resource => ?RES_CORE_USERS,
                 namespace => Ns,
                 data => #{
                     spec => #{
+                        login => Login,
                         password => Pass,
                         roles => Roles
                     }
                 }
             },
-            case nkactor:update(UID, User, #{}) of
-                {error, actor_not_found} ->
-                    case nkactor:create(User, #{forced_uid=>UID}) of
+            case nkactor_core_user_actor:find_login(SrvId, Ns, Login) of
+                {ok, #actor_id{uid=UID}} ->
+                    case nkactor:update(UID, User2, #{}) of
                         {ok, _} ->
-                            ok;
+                            lager:notice("Updated user ~s (~s)", [Login, UID]);
                         {error, Error} ->
-                            lager:error("Could not create role ~s: ~p", [UID, Error])
+                            lager:error("Could not update user ~s: ~p", [Login, Error])
                     end;
-                {ok, _} ->
-                    ok
+                {error, {login_unknown, _}} ->
+                    case nkactor:create(User2) of
+                        {ok, #actor_id{uid=UID}} ->
+                            lager:notice("Created user ~s (~s)", [Login, UID]);
+                        {error, Error} ->
+                            lager:error("Could not create user ~s: ~p", [Login, Error])
+                    end;
+                {error, Error} ->
+                    lager:error("Could not find user ~s: ~p", [Login, Error])
             end,
-            update_roles(Rest);
+            update_users(SrvId, Rest);
         {error, Error} ->
             {error, Error}
     end.

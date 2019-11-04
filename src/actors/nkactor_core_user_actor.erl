@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([find_id/3, write_pass/2, has_role/3]).
+-export([find_login/3, write_pass/2, has_role/3]).
 -export([op_check_pass/2, op_has_role/3, op_get_roles/1, op_add_role/4, op_del_role/3]).
 -export([config/0, parse/3, get/2, request/4, init/2, update/3, sync_op/3]).
 -export([store_pass/1]).
@@ -35,7 +35,7 @@
 
 -define(MAGIC_PASS, <<226,141,134,226,132,153,226,141,133>>). %%  "⍆ℙ⍅"/utf8
 -define(INVALID_PASS_SLEEP, 250).
--define(LABEL_ID, <<"login-user.core.netc.io">>).
+-define(LABEL_LOGIN, <<"login-user.core.netc.io">>).
 
 %% ===================================================================
 %% Types
@@ -48,8 +48,12 @@
 %% API
 %% ===================================================================
 
-find_id(SrvId, Namespace, Id) ->
-    case nkactor:find_label(SrvId, Namespace, ?LABEL_ID, Id) of
+%% @doc
+-spec find_login(nkserver:id(), nkactor:namespace(), binary()) ->
+    {ok, #actor_id{}} | {error, {login_unknown, binary}} | {error, term()}.
+
+find_login(SrvId, Namespace, Id) ->
+    case nkactor:find_label(SrvId, Namespace, ?LABEL_LOGIN, Id) of
         {error, {label_not_found, _}} ->
             {error, {login_unknown, Id}};
         Other ->
@@ -273,8 +277,8 @@ store_pass(Pass) ->
 
 %% @private
 add_label(#{data:=#{spec:=#{login:=Login}}}=Actor) ->
-    Actor2 = nkactor_lib:rm_label_re(?LABEL_ID, Actor),
-    nkactor_lib:add_label(?LABEL_ID, Login, Actor2);
+    Actor2 = nkactor_lib:rm_label_re(?LABEL_LOGIN, Actor),
+    nkactor_lib:add_label(?LABEL_LOGIN, Login, Actor2);
 
 add_label(ActorSt) ->
     ActorSt.
