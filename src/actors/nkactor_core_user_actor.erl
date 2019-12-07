@@ -53,7 +53,7 @@
     {ok, #actor_id{}} | {error, {login_unknown, binary}} | {error, term()}.
 
 find_login(SrvId, Namespace, Id) ->
-    case nkactor:find_label(SrvId, Namespace, ?LABEL_LOGIN, Id) of
+    case nkactor:find_cached_label(SrvId, Namespace, ?LABEL_LOGIN, Id) of
         {error, {label_not_found, _}} ->
             {error, {login_unknown, Id}};
         Other ->

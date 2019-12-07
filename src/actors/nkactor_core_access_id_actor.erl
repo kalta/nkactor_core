@@ -40,7 +40,7 @@
     {ok, #actor_id{}} | {error, term()}.
 
 find_id(SrvId, Namespace, Class, Id) ->
-    nkactor:find_label(SrvId, Namespace, make_label_key(Class), Id).
+    nkactor:find_cached_label(SrvId, Namespace, make_label_key(Class), Id).
 
 
 %% ===================================================================
