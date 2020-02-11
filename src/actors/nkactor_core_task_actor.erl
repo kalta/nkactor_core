@@ -24,7 +24,7 @@
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, request/4, init/2, update/3, event/2,
+-export([config/0, parse/3, request/4, init/2, update/3, event/3,
          sync_op/3, async_op/2, expired/2]).
 -export_type([event/0]).
 
@@ -196,7 +196,7 @@ update(Actor, _Opts, ActorSt) ->
 %%    end,
 %%    {ok, ActorSt2};
 
-event(_Event, _ActorSt) ->
+event(_Event, _Meta, _ActorSt) ->
     continue.
 
 
@@ -287,10 +287,9 @@ set_status(Status, #actor_st{actor=#{data:=Data}=Actor}=ActorSt) ->
     end,
     ActorSt2 = ActorSt#actor_st{actor=Actor#{data:=Data#{status => NewStatus2}}},
     ActorSt3 = set_auto_activate(IsActive, ActorSt2),
-    Event = {updated_state, NewStatus2},
     % Sleep so that it won't go to the same msec
     timer:sleep(2),
-    nkactor_srv_lib:event(Event, ActorSt3).
+    nkactor_srv_lib:event(updated_state, #{status=>NewStatus2}, ActorSt3).
 
 
 
