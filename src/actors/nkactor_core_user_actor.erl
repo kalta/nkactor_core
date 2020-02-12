@@ -149,25 +149,19 @@ parse(_Op, _Actor, _Req) ->
 
 %% @doc
 request(get, <<"_rpc/checkpass">>, ActorId, Req) ->
-    SpanId = maps:get(ot_span_id, Req, undefined),
-    nkserver_ot:log(SpanId, <<"User: check_pass">>),
     Syntax = #{password => binary, '__mandatory'=>password},
     case nkactor_lib:parse_request_params(Req, Syntax) of
         {ok, #{password:=Pass}} ->
             case op_check_pass(ActorId, Pass) of
                 {ok, true} ->
-                    nkserver_ot:log(SpanId, <<"User: password is valid">>),
                     {status, password_valid};
                 {ok, false} ->
-                    nkserver_ot:log(SpanId, <<"User: password invalid, delaying">>),
                     timer:sleep(?INVALID_PASS_SLEEP),
                     {status, password_invalid};
                 {error, Error} ->
-                    nkserver_ot:log(SpanId, <<"User: error checking password: ~p">>, [Error]),
                     {error, Error}
             end;
         {error, Error} ->
-            nkserver_ot:log(SpanId, <<"User: error checking parameters: ~p">>, [Error]),
             {error, Error}
     end;
 
