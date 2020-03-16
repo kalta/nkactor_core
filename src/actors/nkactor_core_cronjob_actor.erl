@@ -25,7 +25,7 @@
 -behavior(nkactor_actor).
 
 -export([target_find_cronjobs/2, get_info/1]).
--export([op_get_info/1]).
+-export([op_get_info/1, op_update_meta/2]).
 -export([config/0, parse/3, activated/2, init/2, update/3, sync_op/3]).
 -export_type([info/0, event/0]).
 -import(nkactor_srv_lib, [event/3]).
@@ -78,6 +78,11 @@ get_info(#{uid:=UID, data:=#{spec:=Spec, status:=Status}}) ->
     Spec2 = maps:with([class, type, schedule, meta], Spec),
     Status2 = maps:with([next_fire_time, last_fire_time, expired], Status),
     Spec2#{uid=>UID, status=>Status2}.
+
+
+%% @doc
+op_update_meta(Id, Meta) when is_map(Meta) ->
+    nkactor:sync_op(Id, {nkactor_update_meta, Meta}).
 
 
 %% @doc
@@ -216,6 +221,13 @@ update(Actor, _Opts, ActorSt) ->
 %% @doc
 sync_op(nkactor_get_info, _From, #actor_st{actor=Actor}=ActorSt) ->
     {reply, {ok, get_info(Actor)}, ActorSt};
+
+sync_op({nkactor_update_meta, Meta}, _From, #actor_st{actor=Actor}=ActorSt) ->
+    #{data:=#{spec:=Spec}=Data} = Actor,
+    Spec2 = Spec#{meta:=Meta},
+    Actor2 = Actor#{data:=Data#{spec:=Spec2}},
+    ActorSt2 = event(updated, #{update=>Actor2}, ActorSt#actor_st{actor=Actor2}),
+    {reply_and_save, ok, ActorSt2};
 
 sync_op(_Op, _From, _ActorSt) ->
     continue.
