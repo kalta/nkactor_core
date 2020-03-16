@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2019 Carlos Gonzalez Florido.  All Rights Reserved.
+%% Copyright (c) 2020 Carlos Gonzalez Florido.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -23,7 +23,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([status/1]).
-
+-export([actor_core_cronjobs_activate/4]).
 
 status(avatar_not_found)                    -> "Avatar is not found";
 status({email_duplicated, E})              -> {"Duplicated email '~s'", [E]};
@@ -44,3 +44,12 @@ status(user_unknown)                       -> "Unknown user";
 status({user_unknown, UserId})             -> {"Unknown user '~s", [UserId]};
 status(watch_stop)                         -> "Watch stopped";
 status(_)   		                        -> continue.
+
+
+%% @doc Called when a CronJob activates
+-spec actor_core_cronjobs_activate(binary()|undefined, binary()|undefined,
+                                   nkactor:uid()|undefined, nkactor:actor()) ->
+    {ok, nkactor:actor()}.
+
+actor_core_cronjobs_activate(_Class, _Type, _TargetUID, Actor) ->
+    {ok, Actor}.

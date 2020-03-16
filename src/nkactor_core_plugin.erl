@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2019 Carlos Gonzalez Florido.  All Rights Reserved.
+%% Copyright (c) 2020 Carlos Gonzalez Florido.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -48,6 +48,7 @@ plugin_config(_SrvId, Config, _Service) ->
 		nkactor_core_access_id_actor,
 		nkactor_core_session_actor,
 		nkactor_core_task_actor,
+		nkactor_core_cronjob_actor,
 		nkactor_core_token_actor,
 		nkactor_core_user_actor,
 		nkactor_core_file_provider_actor,

@@ -1,6 +1,6 @@
 %% -------------------------------------------------------------------
 %%
-%% Copyright (c) 2019 Carlos Gonzalez Florido.  All Rights Reserved.
+%% Copyright (c) 2020 Carlos Gonzalez Florido.  All Rights Reserved.
 %%
 %% This file is provided to you under the Apache License,
 %% Version 2.0 (the "License"); you may not use this file
@@ -18,30 +18,94 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc NkActor Task Actor
--module(nkactor_core_task_actor).
+%% @doc NkActor CoreJob Actor
+-module(nkactor_core_cronjob_actor).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, request/4, init/2, update/3, event/3,
-         sync_op/3, async_op/2, expired/2]).
--export_type([event/0]).
+-export([target_find_cronjobs/2, get_info/1]).
+-export([op_get_info/1]).
+-export([config/0, parse/3, activated/2, init/2, update/3, sync_op/3]).
+-export_type([info/0, event/0]).
+-import(nkactor_srv_lib, [event/3]).
+-import(nkserver_trace, [trace/1, log/3]).
 
 -include_lib("nkactor/include/nkactor.hrl").
 -include_lib("nkactor/include/nkactor_debug.hrl").
+-include_lib("nkserver/include/nkserver.hrl").
 -include("nkactor_core.hrl").
 
--define(DEFAULT_MAX_TRIES, 3).
--define(DEFAULT_MAX_TASK_SECS, 60*60).
+
+%% ===================================================================
+%% External
+%% ===================================================================
+
+
+%% @doc
+target_find_cronjobs(SrvId, TargetUID) ->
+    Opts = #{
+        namespace => <<>>,
+        deep => true,
+        link_type => ?LINK_CRONJOB,
+        size => 1000
+    },
+    case nkactor:search_linked_to(SrvId, TargetUID, Opts) of
+        {ok, List} ->
+            {ok, do_find_cronjobs(List, [])};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+%% @private
+do_find_cronjobs([], Acc) ->
+    Acc;
+
+do_find_cronjobs([{UID, _}|Rest], Acc) ->
+    case op_get_info(UID) of
+        {ok, Info} ->
+            do_find_cronjobs(Rest, [Info|Acc]);
+        {error, actor_not_found} ->
+            do_find_cronjobs(Rest, Acc);
+        {error, Error} ->
+            lager:warning("Could not read cronjob ~s: ~p", [UID, Error]),
+            do_find_cronjobs(Rest, Acc)
+    end.
+
+
+%% @doc
+get_info(#{uid:=UID, data:=#{spec:=Spec, status:=Status}}) ->
+    Spec2 = maps:with([class, type, schedule, meta], Spec),
+    Status2 = maps:with([next_fire_time, last_fire_time, expired], Status),
+    Spec2#{uid=>UID, status=>Status2}.
+
+
+%% @doc
+op_get_info(Id) ->
+    nkactor:sync_op(Id, nkactor_get_info).
+
+
 
 %% ===================================================================
 %% Types
 %% ===================================================================
 
+-type info() ::
+    #{
+        uid := nkactor:uid(),
+        class => binary,
+        type => binary,
+        schedule := map,
+        meta := map,
+        status := #{
+            next_fire_time := null | binary,
+            last_fire_time := null | binary,
+            expired => boolean
+        }
+    }.
 
 -type event() ::
-    {updated_state, map()}.
+    fire_time_updated.
 
 
 %% ===================================================================
@@ -51,182 +115,111 @@
 %% @doc
 config() ->
     #{
-        resource => ?RES_CORE_TASKS,
+        resource => ?RES_CORE_CRON_JOBS,
         versions => [<<"v1a1">>],
         verbs => [create, delete, deletecollection, get, list, update],
+        camel => <<"CronJob">>,
         fields_filter => [
-            'status.last_try_start_time',
-            'status.tries'
+            'spec.class',
+            'spec.type',
+            'spec.target_group',
+            'spec.target_resource',
+            'spec.target_uid',
+            'status.next_fire_time',
+            'status.last_fire_time',
+            'status.expired'
         ],
         fields_sort => [
-            'status.last_try_start_time',
-            'status.tries'
+            'spec.class',
+            'spec.type',
+            'spec.target_group',
+            'spec.target_resource',
+            'spec.target_uid',
+            'status.next_fire_time',
+            'status.last_fire_time',
+            'status.expired'
         ],
         fields_type => #{
-            'status.tries' => integer
-        }
+            'status.next_fire_time' => string_null,
+            'status.last_fire_time' => string_null,
+            'status.expired' => boolean
+        },
+        fields_static => [
+            'spec.class',
+            'spec.type',
+            'spec.target_group',
+            'spec.target_resource',
+            'spec.target_uid'
+        ]
     }.
 
 
 %% @doc
-parse(Op, Actor, _Req) ->
+parse(_Op, _Actor, _Req) ->
     Syntax = #{
         spec => #{
-            job => map,
-            max_tries => pos_integer,
-            max_secs => pos_integer,
+            class => binary,
+            type => binary,
+            target_group => binary,
+            target_resource => binary,
+            target_uid => binary,
+            schedule => fun nklib_schedule:parse/1,
+            meta => map,
+            '__mandatory' => [schedule],
             '__defaults' => #{
-                max_tries => ?DEFAULT_MAX_TRIES,
-                max_secs => ?DEFAULT_MAX_TASK_SECS
+                meta => #{}
             }
         },
         status => #{
-            task_status => {atom, [init, start, progress, error, success, failure]},
-            tries => pos_integer,
-            last_try_start_time => binary,
-            last_status_time => binary,
-            progress => {integer, 0, 100},
-            error_msg => binary
+            next_fire_time => [{atom, [null]}, binary],
+            last_fire_time => [{atom, [null]}, binary],
+            expired => boolean
         },
         '__mandatory' => [spec]
     },
-    % Set expire_time based on max_secs
-    case nkactor_lib:parse_actor_data(Op, Actor, <<"v1a1">>, Syntax) of
-        {ok, #{data:=#{spec:=Spec}}=Actor2} ->
-            #{max_secs:=MaxSecs} = Spec,
-            % If no expires yet, we set it
-            Actor3 = nkactor_lib:maybe_set_ttl(Actor2, 1000*MaxSecs),
-            {ok, Actor3};
-        {error, Error} ->
-            {error, Error}
-    end.
+    {syntax, <<"v1a1">>, Syntax}.
 
 
 %% @doc
-request(update, <<"_state">>, ActorId, Req) ->
-    Body = maps:get(body, Req, #{}),
-    case nkactor:sync_op(ActorId, {update_state, Body}) of
-        ok ->
-            {status, actor_updated};
+activated(_Time, ActorSt) ->
+    ActorSt2 = do_activate(ActorSt),
+    {ok, ActorSt2}.
+
+
+%% @doc
+init(create, #actor_st{actor=#{data:=Data}=Actor}=ActorSt) ->
+    Status1 = maps:get(status, Data, #{}),
+    Base = #{
+        next_fire_time => null,
+        last_fire_time => null,
+        expired => false
+    },
+    Status2 = maps:merge(Base, Status1),
+    Actor2 = Actor#{data:=Data#{status=>Status2}},
+    case do_link_target(ActorSt#actor_st{actor=Actor2}) of
+        {ok, ActorSt2} ->
+            {ok, do_update(ActorSt2)};
         {error, Error} ->
             {error, Error}
     end;
 
-request(_Verb, _Path, _ActorId, _Req) ->
-    continue.
+init(start, ActorSt) ->
+    {ok, do_update(ActorSt)}.
 
 
 %% @doc
-%% - generate initial run_state
-%% - check if the numbers of tries have been exceeded,
-%%   and delete the actor if exceeded
-%% - program 'updated_state' event with progress=start (see event/2)
-%% - save updated status
-init(_Op, #actor_st{actor=#{data:=Data, metadata:=#{expire_time:=_}}=Actor}=ActorSt) ->
-    Status = maps:get(status, Data, #{}),
-    Tries = maps:get(tries, Status, 0),
-    #{spec := #{max_tries:=MaxTries}} = Data,
-    case Tries >= MaxTries of
-        false ->
-            Now = nklib_date:now_3339(usecs),
-            Status2 = Status#{
-                task_status => init,
-                last_try_start_time => Now,
-                tries => Tries+1,
-                progress => 0
-            },
-            Actor2 = Actor#{data:=Data#{status => Status2}},
-            % We save the new status to disk
-            ActorSt2 = ActorSt#actor_st{actor=Actor2, is_dirty=true},
-            % We don't want to call set_run_state/2 yet, because the start
-            % event would arrive before the creation event
-            nkactor:async_op(self(), {update_state, #{task_status=>start}}),
-            ActorSt3 = set_auto_activate(true, ActorSt2),
-            {ok, ActorSt3};
-        true ->
-            Status2 = Status#{
-                task_status =>  failure,
-                error_msg => <<"task_max_tries_reached">>
-            },
-            ActorSt2 = set_status(Status2, ActorSt),
-            ?ACTOR_LOG(notice, "max tries reached for task", [], ActorSt2),
-            {delete, task_max_tries_reached}
-    end.
-
-
 update(Actor, _Opts, ActorSt) ->
-    set_auto_activate(true, ActorSt#actor_st{actor=Actor}).
-
-
-%%%% @doc Called on every event launched at this actor (our's or not)
-%%%% Used to generate API events
-%%event({updated_state, UpdStatus}, #actor_st{actor=Actor}=ActorSt) ->
-%%    #actor{data=Data} = Actor,
-%%    #{
-%%        spec := #{max_tries := MaxTries},
-%%        <<"status">> := #{<<"tries">> := Tries}
-%%    } = Data,
-%%    #{status:=Status} = UpdStatus,
-%%    ApiEvBody = #{
-%%        <<"tries">> => Tries,
-%%       max_tries => MaxTries
-%%    },
-%%    ActorSt2 = case Status of
-%%        init ->
-%%            ActorSt;
-%%        start ->
-%%            % For 'start', include all spec in API event body
-%%            Spec = maps:get(spec, Data, #{}),
-%%            ApiEvBody2 = maps:merge(Spec, ApiEvBody),
-%%            ApiEv = #{reason => <<"TaskStart">>, body => ApiEvBody2},
-%%            nkactor_core_actor_util:api_event(ApiEv, ActorSt);
-%%        progress ->
-%%            ActorSt;
-%%        error ->
-%%            ErrMsg = maps:get(errorMsg, UpdStatus, <<>>),
-%%            ApiEv = #{reason => <<"TaskError">>, message=>ErrMsg, body => ApiEvBody},
-%%            nkactor_core_actor_util:api_event(ApiEv, ActorSt);
-%%        success ->
-%%            ApiEv = #{reason => <<"TaskSuccess">>, body => ApiEvBody},
-%%            nkactor_core_actor_util:api_event(ApiEv, ActorSt);
-%%        failure ->
-%%            ErrMsg = maps:get(errorMsg, UpdStatus, <<>>),
-%%            ApiEv = #{reason => <<"TaskFaillure">>, message=>ErrMsg, body => ApiEvBody},
-%%            nkactor_core_actor_util:api_event(ApiEv, ActorSt)
-%%    end,
-%%    {ok, ActorSt2};
-
-event(_Event, _Meta, _ActorSt) ->
-    continue.
+    Actor2 = nkactor_srv_lib:update_status(Actor, ActorSt),
+    {ok, do_update(ActorSt#actor_st{actor=Actor2})}.
 
 
 %% @doc
-sync_op({update_state, Body}, _From, ActorSt) ->
-    {Reply, ActorSt2} = do_update_state(Body, ActorSt),
-    {reply_and_save, Reply, ActorSt2};
+sync_op(nkactor_get_info, _From, #actor_st{actor=Actor}=ActorSt) ->
+    {reply, {ok, get_info(Actor)}, ActorSt};
 
 sync_op(_Op, _From, _ActorSt) ->
     continue.
 
-
-%% @doc
-async_op({update_state, Body}, ActorSt) ->
-    {_Reply, ActorSt2} = do_update_state(Body, ActorSt),
-    {noreply_and_save, ActorSt2};
-
-async_op(_Op, _ActorSt) ->
-    continue.
-
-
-%% @doc
-expired(_Time, ActorSt) ->
-    Status = #{
-        status => failure,
-        error_msg => <<"task_max_time_reached">>
-    },
-    ActorSt2 = set_status(Status, ActorSt),
-    ?ACTOR_LOG(info, "max time reached for task", [], ActorSt2),
-    {delete, ActorSt2}.
 
 
 
@@ -236,63 +229,88 @@ expired(_Time, ActorSt) ->
 
 
 %% @private
-set_auto_activate(Bool, #actor_st{actor=Actor}=ActorSt) ->
-    % If we set no activation time, set it permanent
-    case Actor of
-        #{metadata:=#{activate_time:=_}} ->
-            ActorSt;
+do_link_target(#actor_st{actor=#{data:=#{spec:=Spec}}=Actor}=ActorSt) ->
+    case Spec of
+        #{target_group:=Group, target_resource:=Res, target_uid:=UID} ->
+            case nkactor_lib:add_checked_link(UID, Group, Res, Actor, ?LINK_CRONJOB) of
+                {ok, _, Actor2} ->
+                    {ok, ActorSt#actor_st{actor=Actor2}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        #{target_uid:=UID} ->
+            case nkactor_lib:add_checked_link(UID, Actor, ?LINK_CRONJOB) of
+                {ok, #actor_id{group=Group, resource=Res}, Actor2} ->
+                    #{data:=#{spec:=Spec2}=Data2} = Actor2,
+                    Spec3 = Spec2#{target_group=>Group, target_resource=>Res},
+                    Actor3 = Actor2#{data:=Data2#{spec:=Spec3}},
+                    {ok, ActorSt#actor_st{actor=Actor3}};
+                {error, Error} ->
+                    {error, Error}
+            end;
         _ ->
-            nkactor_srv_lib:set_auto_activate(Bool, ActorSt)
-    end.
-
-
-%% @doc
-do_update_state(Body, ActorSt) ->
-    Syntax = #{
-        task_status => {atom, [start, progress, error, success, failure]},
-        progress => {integer, 0, 100},
-        error_msg => binary,
-        '__mandatory' => [task_status]
-    },
-    case nkactor_lib:parse(Body, Syntax, false) of
-        {ok, Status} ->
-            {ok, set_status(Status, ActorSt)};
-        {error, Error} ->
-            {{error, Error}, ActorSt}
+            {ok, ActorSt}
     end.
 
 
 %% @private
-%% - Sets a new run_state
-%% - Send event
-set_status(Status, #actor_st{actor=#{data:=Data}=Actor}=ActorSt) ->
-    OldStatus = maps:get(status, Data, #{}),
-    NewStatus1 = maps:merge(OldStatus, Status),
+do_update(#actor_st{actor=Actor}=ActorSt) ->
+    #{data:=#{spec:=#{schedule:=Schedule}}=Data} = Actor,
+    Status = maps:get(status, Data, #{}),
+    FireTime = maps:get(next_fire_time, Status),
+    Expired = maps:get(expired, Status),
     Now = nklib_date:now_3339(secs),
-    NewStatus2 = NewStatus1#{last_status_time => Now},
-    % On expired, it may have no status
-    IsActive = case maps:get(task_status, NewStatus2, start) of
-        success ->
-            % Allow events
-            nkactor_srv:delayed_async_op(self(), delete, 100),
-            false;
-        error ->
-            nkactor_srv:delayed_async_op(self(), {stop, task_status_error}, 100),
-            false;
-        failure ->
-            nkactor_srv:delayed_async_op(self(), delete, 100),
-            false;
-        _ ->
-            true
-    end,
-    ActorSt2 = ActorSt#actor_st{actor=Actor#{data:=Data#{status => NewStatus2}}},
-    ActorSt3 = set_auto_activate(IsActive, ActorSt2),
-    % Sleep so that it won't go to the same msec
-    timer:sleep(2),
-    nkactor_srv_lib:event(updated_state, #{status=>NewStatus2}, ActorSt3).
+    case nklib_schedule:next_fire_time2(Now, Schedule, Status) of
+        <<>> when FireTime == null, Expired == true ->
+            ActorSt;
+        <<>> ->
+            Status2 = Status#{
+                next_fire_time => null,
+                expired => true
+            },
+            Actor2 = Actor#{data:=Data#{status:=Status2}},
+            ActorSt2 = ActorSt#actor_st{actor=Actor2, is_dirty=true},
+            ActorSt3 = nkactor_srv_lib:unset_activate_time(ActorSt2),
+            ActorSt4 = event(fire_time_updated, #{fire_time=>null}, ActorSt3),
+            ActorSt4;
+        FireTime ->
+            ActorSt;
+        NextFireTime ->
+            Status2 = Status#{
+                next_fire_time => NextFireTime,
+                expired => false
+            },
+            Actor2 = Actor#{data:=Data#{status:=Status2}},
+            ActorSt2 = ActorSt#actor_st{actor=Actor2, is_dirty=true},
+            ActorSt3 = nkactor_srv_lib:set_activate_time(NextFireTime, ActorSt2),
+            ActorSt4 = event(fire_time_updated, #{fire_time=>NextFireTime}, ActorSt3),
+            ActorSt4
+    end.
 
 
-
+%% @private
+do_activate(#actor_st{srv=SrvId, actor=Actor}=ActorSt) ->
+    #{data:=#{spec:=Spec, status:=#{next_fire_time:=FireTime}}} = Actor,
+    Now = nklib_date:now_3339(usecs),
+    case Now > FireTime of
+        true ->
+            trace("calling actor_cronjob_activate"),
+            Args = [
+                maps:get(class, Spec, undefined),
+                maps:get(type, Spec, undefined),
+                maps:get(target_uid, Spec, undefined),
+                Actor
+            ],
+            {ok, Actor2} = ?CALL_SRV(SrvId, actor_core_cronjobs_activate, Args),
+            #{data:=#{status:=Status}=Data} = Actor,
+            log(debug, "last_fire_time: ~s", [Now]),
+            Status2 = Status#{last_fire_time => Now},
+            Actor3 = Actor2#{data:=Data#{status:=Status2}},
+            do_update(ActorSt#actor_st{actor=Actor3});
+        false ->
+            log(warning, "called activate for previous date!", []),
+            ActorSt
+    end.
 
 
 
