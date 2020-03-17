@@ -28,7 +28,7 @@
 -export([op_get_info/1, op_update_meta/2]).
 -export([config/0, parse/3, activated/2, init/2, update/3, sync_op/3]).
 -export_type([info/0, event/0]).
--import(nkactor_srv_lib, [event/3]).
+-import(nkactor_srv_lib, [new_actor_span/4, event/3]).
 -import(nkserver_trace, [trace/1, log/3]).
 
 -include_lib("nkactor/include/nkactor.hrl").
@@ -306,19 +306,28 @@ do_activate(#actor_st{srv=SrvId, actor=Actor}=ActorSt) ->
     Now = nklib_date:now_3339(usecs),
     case Now > FireTime of
         true ->
-            trace("calling actor_cronjob_activate"),
-            Args = [
-                maps:get(class, Spec, undefined),
-                maps:get(type, Spec, undefined),
-                maps:get(target_uid, Spec, undefined),
-                Actor
-            ],
-            {ok, Actor2} = ?CALL_SRV(SrvId, actor_core_cronjobs_activate, Args),
-            #{data:=#{status:=Status}=Data} = Actor,
-            log(debug, "last_fire_time: ~s", [Now]),
-            Status2 = Status#{last_fire_time => Now},
-            Actor3 = Actor2#{data:=Data#{status:=Status2}},
-            do_update(ActorSt#actor_st{actor=Actor3});
+            Fun = fun() ->
+                trace("calling actor_cronjob_activate"),
+                Args = [
+                    maps:get(class, Spec, undefined),
+                    maps:get(type, Spec, undefined),
+                    maps:get(target_uid, Spec, undefined),
+                    Actor
+                ],
+                Actor2 = try
+                    {ok, ActorAct} = ?CALL_SRV(SrvId, actor_core_cronjobs_activate, Args),
+                    #{data:=#{status:=Status}=Data} = ActorAct,
+                    log(debug, "last_fire_time: ~s", [Now]),
+                    Status2 = Status#{last_fire_time => Now},
+                    ActorAct#{data:=Data#{status:=Status2}}
+                catch
+                    Class:Reason:Stack ->
+                        lager:warning("Exception calling actor_core_cronjobs_activate: ~p ~p (~p)", [Class, Reason, Stack]),
+                    Actor
+                end,
+                do_update(ActorSt#actor_st{actor=Actor2})
+            end,
+            new_actor_span(cronjob_fired, Fun, #{}, ActorSt);
         false ->
             log(warning, "called activate for previous date!", []),
             ActorSt
