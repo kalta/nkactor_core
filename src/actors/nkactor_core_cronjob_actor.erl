@@ -317,7 +317,7 @@ do_activate(#actor_st{srv=SrvId, actor=Actor}=ActorSt) ->
                 Actor2 = try
                     {ok, ActorAct} = ?CALL_SRV(SrvId, actor_core_cronjobs_activate, Args),
                     #{data:=#{status:=Status}=Data} = ActorAct,
-                    log(debug, "last_fire_time: ~s", [Now]),
+                    log(debug, "new last_fire_time: ~s", [Now]),
                     Status2 = Status#{last_fire_time => Now},
                     ActorAct#{data:=Data#{status:=Status2}}
                 catch
