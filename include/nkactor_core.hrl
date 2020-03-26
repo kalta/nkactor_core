@@ -24,7 +24,7 @@
 -define(RES_CORE_NODES, <<"nodes">>).
 
 
--define(LINK_CRONJOB, <<"cronjobs.core.netc.io">>).
+-define(LINK_TARGET_CRONJOB, <<"target-cronjobs.core.netc.io">>).
 
 -define(LINK_MEMBER_USER, <<"member-user.core.netc.io">>).
 

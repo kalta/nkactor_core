@@ -19,12 +19,13 @@
 %% -------------------------------------------------------------------
 
 %% @doc NkActor CoreJob Actor
+%% Can block during call to actor_core_cronjobs_activate, spawn there if possible
 -module(nkactor_core_cronjob_actor).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -behavior(nkactor_actor).
 
--export([target_find_cronjobs/2, get_info/1]).
+-export([find_target_cronjobs/2, get_info/1]).
 -export([op_get_info/1, op_update_meta/2]).
 -export([config/0, parse/3, activated/2, init/2, update/3, sync_op/3]).
 -export_type([info/0, event/0]).
@@ -38,16 +39,38 @@
 
 
 %% ===================================================================
+%% Types
+%% ===================================================================
+
+-type info() ::
+    #{
+        uid := nkactor:uid(),
+        class => binary(),
+        type => binary(),
+        schedule := nklib_schedule:params(),
+        next_fire_time := null | binary(),
+        last_fire_time := null | binary(),
+        expired := boolean,
+        meta := map
+    }.
+
+-type event() ::
+    fire_time_updated.
+
+
+
+
+%% ===================================================================
 %% External
 %% ===================================================================
 
 
 %% @doc
-target_find_cronjobs(SrvId, TargetUID) ->
+find_target_cronjobs(SrvId, TargetUID) ->
     Opts = #{
         namespace => <<>>,
         deep => true,
-        link_type => ?LINK_CRONJOB,
+        link_type => ?LINK_TARGET_CRONJOB,
         size => 1000
     },
     case nkactor:search_linked_to(SrvId, TargetUID, Opts) of
@@ -56,6 +79,7 @@ target_find_cronjobs(SrvId, TargetUID) ->
         {error, Error} ->
             {error, Error}
     end.
+
 
 %% @private
 do_find_cronjobs([], Acc) ->
@@ -77,7 +101,8 @@ do_find_cronjobs([{UID, _}|Rest], Acc) ->
 get_info(#{uid:=UID, data:=#{spec:=Spec, status:=Status}}) ->
     Spec2 = maps:with([class, type, schedule, meta], Spec),
     Status2 = maps:with([next_fire_time, last_fire_time, expired], Status),
-    Spec2#{uid=>UID, status=>Status2}.
+    Info = maps:merge(Spec2, Status2),
+    Info#{uid => UID}.
 
 
 %% @doc
@@ -90,27 +115,6 @@ op_get_info(Id) ->
     nkactor:sync_op(Id, nkactor_get_info).
 
 
-
-%% ===================================================================
-%% Types
-%% ===================================================================
-
--type info() ::
-    #{
-        uid := nkactor:uid(),
-        class => binary,
-        type => binary,
-        schedule := map,
-        meta := map,
-        status := #{
-            next_fire_time := null | binary,
-            last_fire_time := null | binary,
-            expired => boolean
-        }
-    }.
-
--type event() ::
-    fire_time_updated.
 
 
 %% ===================================================================
@@ -244,14 +248,14 @@ sync_op(_Op, _From, _ActorSt) ->
 do_link_target(#actor_st{actor=#{data:=#{spec:=Spec}}=Actor}=ActorSt) ->
     case Spec of
         #{target_group:=Group, target_resource:=Res, target_uid:=UID} ->
-            case nkactor_lib:add_checked_link(UID, Group, Res, Actor, ?LINK_CRONJOB) of
+            case nkactor_lib:add_checked_link(UID, Group, Res, Actor, ?LINK_TARGET_CRONJOB) of
                 {ok, _, Actor2} ->
                     {ok, ActorSt#actor_st{actor=Actor2}};
                 {error, Error} ->
                     {error, Error}
             end;
         #{target_uid:=UID} ->
-            case nkactor_lib:add_checked_link(UID, Actor, ?LINK_CRONJOB) of
+            case nkactor_lib:add_checked_link(UID, Actor, ?LINK_TARGET_CRONJOB) of
                 {ok, #actor_id{group=Group, resource=Res}, Actor2} ->
                     #{data:=#{spec:=Spec2}=Data2} = Actor2,
                     Spec3 = Spec2#{target_group=>Group, target_resource=>Res},

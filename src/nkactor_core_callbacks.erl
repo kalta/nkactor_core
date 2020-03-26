@@ -47,6 +47,7 @@ status(_)   		                        -> continue.
 
 
 %% @doc Called when a CronJob activates
+%% Spawn as soon as possible to avoid blocking the actor
 -spec actor_core_cronjobs_activate(binary()|undefined, binary()|undefined,
                                    nkactor:uid()|undefined, nkactor:actor()) ->
     {ok, nkactor:actor()}.
