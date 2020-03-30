@@ -21,7 +21,7 @@
 %% @doc Default callbacks for plugin definitions
 -module(nkactor_core_plugin).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
--export([plugin_deps/0, plugin_config/3]).
+-export([plugin_deps/0, plugin_config/3, plugin_start/3]).
 
 -include("nkactor_core.hrl").
 
@@ -57,3 +57,21 @@ plugin_config(_SrvId, Config, _Service) ->
 	nkactor_plugin:add_modules(Config, ?GROUP_CORE, Modules).
 
 
+%% @doc
+plugin_start(SrvId, _Config, _Service) ->
+	Spec = #{
+		id => events,
+		start => {nkactor_core_events, start_link, [SrvId]},
+		restart => permanent,
+		shutdown => 5000,
+		type => worker,
+		modules => [nkactor_core_events]
+	},
+	case nkserver_workers_sup:update_child2(SrvId, Spec, #{}) of
+		{ok, Op, Pid} ->
+			lager:info("Events server ~p: ~p", [Op, Pid]),
+			ok;
+		{error, Error} ->
+			lager:warning("Events server start error: ~p"),
+			{error, Error}
+	end.

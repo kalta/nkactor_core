@@ -35,6 +35,7 @@ start_link() ->
 
 %% @private
 init(ChildSpecs) ->
+    ets:new(nkactor_core_events, [named_table, public, {keypos, 2}]),
     {ok, ChildSpecs}.
 
 
