@@ -26,7 +26,7 @@
 -behavior(nkactor_actor).
 
 -export([find_target_cronjobs/2, get_info/1]).
--export([op_get_info/1, op_update_meta/2]).
+-export([op_get_info/1, op_update_meta/2, op_update_schedule/2]).
 -export([config/0, parse/3, activated/2, init/2, update/3, sync_op/3]).
 -export_type([info/0, event/0]).
 -import(nkactor_srv_lib, [new_actor_span/4, event/3]).
@@ -108,6 +108,11 @@ get_info(#{uid:=UID, data:=#{spec:=Spec, status:=Status}}) ->
 %% @doc
 op_update_meta(Id, Meta) when is_map(Meta) ->
     nkactor:sync_op(Id, {nkactor_update_meta, Meta}).
+
+
+%% @doc
+op_update_schedule(Id, Meta) when is_map(Meta) ->
+    nkactor:sync_op(Id, {nkactor_update_schedule, Meta}).
 
 
 %% @doc
@@ -228,10 +233,40 @@ sync_op(nkactor_get_info, _From, #actor_st{actor=Actor}=ActorSt) ->
 
 sync_op({nkactor_update_meta, Meta}, _From, #actor_st{actor=Actor}=ActorSt) ->
     #{data:=#{spec:=Spec}=Data} = Actor,
-    Spec2 = Spec#{meta:=Meta},
-    Actor2 = Actor#{data:=Data#{spec:=Spec2}},
-    ActorSt2 = event(updated, #{update=>Actor2}, ActorSt#actor_st{actor=Actor2}),
-    {reply_and_save, ok, ActorSt2};
+    case Spec of
+        #{meta:=Meta} ->
+            {reply, ok, ActorSt};
+        _ ->
+            Spec2 = Spec#{meta:=Meta},
+            Actor2 = Actor#{data:=Data#{spec:=Spec2}},
+            case nkactor_srv_lib:update(Actor2, #{}, ActorSt) of
+                {ok, ActorSt2} ->
+                    {reply, ok, ActorSt2};
+                {error, Error, ActorSt2} ->
+                    {reply, {error, Error}, ActorSt2}
+            end
+    end;
+
+sync_op({nkactor_update_schedule, Schedule}, _From, #actor_st{actor=Actor}=ActorSt) ->
+    case nklib_schedule:parse(Schedule) of
+        {ok, Parsed} ->
+            #{data:=#{spec:=Spec}=Data} = Actor,
+            case Spec of
+                #{schedule:=Parsed} ->
+                    {reply, ok, ActorSt};
+                _ ->
+                    Spec2 = Spec#{schedule:=Parsed},
+                    Actor2 = Actor#{data:=Data#{spec:=Spec2}},
+                    case nkactor_srv_lib:update(Actor2, #{}, ActorSt) of
+                        {ok, ActorSt2} ->
+                            {reply, ok, ActorSt2};
+                        {error, Error, ActorSt2} ->
+                            {reply, {error, Error}, ActorSt2}
+                    end
+            end;
+        {error, Error} ->
+            {reply, {error, Error}, ActorSt}
+    end;
 
 sync_op(_Op, _From, _ActorSt) ->
     continue.
