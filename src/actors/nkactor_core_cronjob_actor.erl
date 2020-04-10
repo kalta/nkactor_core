@@ -25,7 +25,7 @@
 
 -behavior(nkactor_actor).
 
--export([find_target_cronjobs/2, get_info/1]).
+-export([find_by_target/2, get_infos/1, get_info/1]).
 -export([op_get_info/1, op_update_meta/2, op_update_schedule/2]).
 -export([config/0, parse/3, activated/2, init/2, update/3, sync_op/3]).
 -export_type([info/0, event/0]).
@@ -66,7 +66,7 @@
 
 
 %% @doc
-find_target_cronjobs(SrvId, TargetUID) ->
+find_by_target(SrvId, TargetUID) ->
     Opts = #{
         namespace => <<>>,
         deep => true,
@@ -75,25 +75,29 @@ find_target_cronjobs(SrvId, TargetUID) ->
     },
     case nkactor:search_linked_to(SrvId, TargetUID, Opts) of
         {ok, List} ->
-            {ok, do_find_cronjobs(List, [])};
+            {ok, [UID || {UID, _} <- List]};
         {error, Error} ->
             {error, Error}
     end.
 
 
-%% @private
-do_find_cronjobs([], Acc) ->
-    Acc;
+%% @doc
+-spec get_infos([nkactor:uid()]) -> [info()].
+get_infos(UIDs) ->
+    get_infos(lists:sort(UIDs), []).
 
-do_find_cronjobs([{UID, _}|Rest], Acc) ->
+
+%% @private
+get_infos([], Acc) ->
+    lists:reverse(Acc);
+
+get_infos([UID|Rest], Acc) ->
     case op_get_info(UID) of
         {ok, Info} ->
-            do_find_cronjobs(Rest, [Info|Acc]);
-        {error, actor_not_found} ->
-            do_find_cronjobs(Rest, Acc);
+            get_infos(Rest, [Info|Acc]);
         {error, Error} ->
-            lager:warning("Could not read cronjob ~s: ~p", [UID, Error]),
-            do_find_cronjobs(Rest, Acc)
+            log(warning, "could not read cronjob ~s: ~p", [UID, Error]),
+            get_infos(Rest, Acc)
     end.
 
 
