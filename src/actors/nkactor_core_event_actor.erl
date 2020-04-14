@@ -24,6 +24,7 @@
 
 -behavior(nkactor_actor).
 
+-export([search/2]).
 -export([config/0, parse/3]).
 
 -include("nkactor_core.hrl").
@@ -32,6 +33,47 @@
 %% ===================================================================
 %% Actor behaviour
 %% ===================================================================
+
+search(SrvId, Opts) ->
+    Filters1 = [
+        #{field => group, value => ?GROUP_CORE},
+        #{field => resource, value => ?RES_CORE_EVENTS}
+    ],
+    Filters2 = case Opts of
+        #{start_time:=Start} ->
+            [#{field=>last_update, op=>gte, value=>Start}|Filters1];
+        _ ->
+            Filters1
+    end,
+    Filters3 = case Opts of
+        #{stop_time:=Stop} ->
+            [#{field=>last_update, op=>lte, value=>Stop}|Filters2];
+        _ ->
+            Filters2
+    end,
+    Filters4 = case Opts of
+        #{target_uid:=Target} ->
+            Target2 = nkactor_lib:normalized_name(Target),
+            [#{field=>name, op=>prefix, value=>Target2}|Filters3];
+        _ ->
+            Filters3
+    end,
+    Filters5 = case Opts of
+        #{min_priority:=Priority} ->
+            [#{field=><<"data.priority">>, op=>gte, value=>Priority}|Filters4];
+        _ ->
+            Filters4
+    end,
+    Spec = #{
+        namespace => maps:get(namespace, Opts, <<>>),
+        deep => maps:get(deep, Opts, true),
+        filter => #{'and' => Filters5},
+        sort => [#{field=>last_update, order=>desc}],
+        from => maps:get(from, Opts, 0),
+        size => maps:get(size, Opts, 100)
+    },
+    nkactor:search_actors(SrvId, Spec, #{}).
+
 
 %% @doc
 config() ->
@@ -45,6 +87,7 @@ config() ->
             'class',
             'type',
             'count',
+            'priority',
             'first_timestamp',
             'last_timestamp',
             'target.uid',
@@ -56,6 +99,7 @@ config() ->
         fields_sort => [
             'class',
             'type',
+            'priority',
             'first_timestamp',
             'last_timestamp',
             'target.uid',
@@ -64,8 +108,9 @@ config() ->
             'target.name'
         ],
         fields_type => #{
-            'count' => integer,
-            'tags' => array
+            'data.count' => integer,
+            'data.priority' => integer,
+            'data.tags' => array
         }
     }.
 
@@ -79,6 +124,7 @@ parse(_Op, _Actor, _Req) ->
         count => pos_integer,
         message => binary,
         body => map,
+        priority => pos_integer,
         first_timestamp => pos_integer,
         last_timestamp => pos_integer,
         tags => {list, binary},
@@ -90,6 +136,6 @@ parse(_Op, _Actor, _Req) ->
             hash => binary
         },
         '__mandatory' => [class, type, count, first_timestamp],
-        '__defaults' => #{body => #{}, message => <<>>, tags => []}
+        '__defaults' => #{body => #{}, message => <<>>, tags => [], priority=>500}
     },
     {syntax, <<"v1a1">>, Syntax}.
