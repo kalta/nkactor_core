@@ -60,7 +60,7 @@ search(SrvId, Opts) ->
     end,
     Filters5 = case Opts of
         #{min_priority:=Priority} ->
-            [#{field=><<"data.priority">>, op=>gte, value=>Priority}|Filters4];
+            [#{field=><<"data.priority">>, op=>gte, value=>Priority, type=>integer}|Filters4];
         _ ->
             Filters4
     end,
@@ -108,9 +108,9 @@ config() ->
             'target.name'
         ],
         fields_type => #{
-            'data.count' => integer,
-            'data.priority' => integer,
-            'data.tags' => array
+            'count' => integer,
+            'priority' => integer,
+            'tags' => array
         }
     }.
 

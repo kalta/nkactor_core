@@ -123,8 +123,9 @@ make_event_data(Event, TargetActor) ->
 	Time = nklib_date:now_3339(msecs),
 	#{
 		class => maps:get(class, Event),
-		type => maps:get(type, Event, <<"normal">>),  % normal or waning
+		type => maps:get(type, Event, <<"normal">>),  % normal or warning
 		count => 1,
+		priority => maps:get(priority, Event, 500),
 		message => maps:get(message, Event, <<>>),
 		body => maps:get(body, Event, #{}),
 		tags => maps:get(tags, Event, []),
