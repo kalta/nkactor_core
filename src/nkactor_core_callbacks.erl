@@ -23,7 +23,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -export([status/1]).
--export([actor_core_cronjobs_activate/4]).
+-export([actor_core_cronjobs_activate/4, actor_core_events_saved/2]).
 
 status(avatar_not_found)                    -> "Avatar is not found";
 status({email_duplicated, E})              -> {"Duplicated email '~s'", [E]};
@@ -54,3 +54,11 @@ status(_)   		                        -> continue.
 
 actor_core_cronjobs_activate(_Class, _Type, _TargetUID, Actor) ->
     {ok, Actor}.
+
+
+%% @doc Called when a series of events have been saved
+-spec actor_core_events_saved(nkserver:id(), [nkactor:actor()]) ->
+    ok.
+
+actor_core_events_saved(_SrvId, _Events) ->
+    ok.

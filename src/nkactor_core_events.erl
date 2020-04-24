@@ -31,7 +31,7 @@
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 -behaviour(gen_server).
 
--export([make_and_send_event/3, make_event/2, send_event/2]).
+-export([make_and_send_event/3, make_event/2, send_event/2, make_uid/0]).
 -export([wait_for_save/1, start_link/1]).
 -export([init/1, terminate/2, code_change/3, handle_call/3, handle_cast/2, handle_info/2]).
 -export([test/0]).
@@ -54,11 +54,12 @@
 -type event() ::
 	#{
 		class := binary(),
-		type := binary(),   % Default "normal"
+		type => binary(),   % Default "normal"
+		priority => integer(),
 		message => binary(),
 		body => map(),
-		tags => [binary()]
-		%related => #{Type::binary() => nkserver_actor:uid()}
+		tags => [binary()],
+		uid => binary()
 	}.
 
 
@@ -92,8 +93,13 @@ make_and_send_event(SrvId, Event, TargetActor) ->
 make_event(Event, TargetActor) ->
 	#{namespace:=Ns, uid:=TargetUID} = TargetActor,
 	Time = nklib_date:now_bin(msecs),   % 9 bytes
-	<<UUID:18/binary, _/binary>> = nklib_util:luid(),
-	UID = <<?RES_CORE_EVENTS/binary, $_, Time/binary, UUID/binary>>,
+	UUID = case maps:find(uid, Event) of
+		{ok, UserUUID} ->
+			UserUUID;
+		error ->
+			make_uid()
+	end,
+	UID = <<?RES_CORE_EVENTS/binary, $-, Time/binary, UUID/binary>>,
 	Name = nkactor_lib:normalized_name(<<TargetUID/binary, $-, UUID/binary>>),
 	Now = nklib_date:now_3339(usecs),
 	BaseActor = #{
@@ -141,15 +147,24 @@ make_event_data(Event, TargetActor) ->
 	}.
 
 
+%% @doc
+make_uid() ->
+	<<UUID:18/binary, _/binary>> = nklib_util:luid(),
+	UUID.
+
+
+
+
 %% @doc Sends a new or recurring event to event server
 %% If it is a recurring event, and the old versions have not been sent yet,
 %% only one will be sent with updated counters
 -spec send_event(nkserver:id(), nkactor:actor()) ->
-	ok.
+	nkactor:actor().
 
 send_event(SrvId, EvActor) ->
 	{_Op, EvActor2, Hash} = update_counter(EvActor),
-	gen_server:cast(get_pid(SrvId), {new_event, Hash, EvActor2}).
+	gen_server:cast(get_pid(SrvId), {new_event, Hash, EvActor2}),
+	EvActor.
 
 
 %% @private
@@ -213,7 +228,6 @@ handle_call(Msg, _From, State) ->
 	{noreply, #state{}} | {stop, term(), #state{}}.
 
 handle_cast({new_event, Hash, Event}, #state{to_save=ToSave}=State) ->
-	lager:error("NKLOG NEW EB"),
 	ToSave2 = ToSave#{Hash => Event},
 	{noreply, State#state{to_save=ToSave2}};
 
@@ -327,8 +341,7 @@ do_save(SrvId, Actors, Tries) when Tries > 0 ->
 	nkserver_trace:trace("calling events actor_db_update"),
 	case ?CALL_SRV(SrvId, actor_db_create, [SrvId, Actors, #{}]) of
 		{ok, _Meta} ->
-			lager:error("NKLOG SAVED ~p", [Actors]),
-
+			?CALL_SRV(SrvId, actor_core_events_saved, [SrvId, Actors]),
 			nkserver_trace:trace("events saved"),
 			ok;
 		{error, Error} ->
