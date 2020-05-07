@@ -86,7 +86,7 @@ op_has_role(UserId, Role, Namespace) ->
     nkactor:sync_op(UserId, {nkactor_has_role, to_bin(Role), to_bin(Namespace)}).
 
 
--spec op_get_roles(nkactor:id()) -> {ok, roles()} | {error, term()}.
+-spec op_get_roles(nkactor:id()) -> {ok, Member::nkactor:uid(), roles()} | {error, term()}.
 
 op_get_roles(UserId) ->
     nkactor:sync_op(UserId, nkactor_get_roles).
@@ -208,8 +208,9 @@ sync_op({nkactor_check_pass, Pass}, _From, ActorSt) ->
     {reply, Result, ActorSt};
 
 sync_op(nkactor_get_roles, _From, #actor_st{actor=#{data:=#{spec:=Spec}}}=ActorSt) ->
+    Member = maps:get(member, Spec, <<>>),
     Roles = maps:get(roles, Spec, []),
-    {reply, {ok, Roles}, ActorSt};
+    {reply, {ok, Member, Roles}, ActorSt};
 
 sync_op({nkactor_has_role, Role, Namespace}, _From, ActorSt) ->
     Reply = do_has_role(Role, Namespace, check, ActorSt),
