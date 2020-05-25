@@ -48,6 +48,7 @@ plugin_config(_SrvId, Config, _Service) ->
 		nkactor_core_access_id_actor,
 		nkactor_core_session_actor,
 		nkactor_core_task_actor,
+		nkactor_core_cache_actor,
 		nkactor_core_cronjob_actor,
 		nkactor_core_token_actor,
 		nkactor_core_user_actor,

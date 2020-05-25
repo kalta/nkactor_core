@@ -15,7 +15,7 @@
 -define(RES_CORE_USERS, <<"users">>).
 -define(RES_CORE_CONTACTS, <<"contacts">>).
 -define(RES_CORE_TOKENS, <<"tokens">>).
--define(RES_CORE_CACHE, <<"cache">>).
+-define(RES_CORE_CACHE, <<"caches">>).
 -define(RES_CORE_CONFIGMAPS, <<"configmaps">>).
 -define(RES_CORE_TASKS, <<"tasks">>).
 -define(RES_CORE_CRON_JOBS, <<"cronjobs">>).
@@ -26,6 +26,7 @@
 
 
 -define(LINK_TARGET_CRONJOB, <<"target-cronjobs.core.netc.io">>).
+-define(LINK_TARGET_CACHE, <<"target-caches.core.netc.io">>).
 
 -define(LINK_MEMBER_USER, <<"member-user.core.netc.io">>).
 

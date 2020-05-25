@@ -18,19 +18,91 @@
 %%
 %% -------------------------------------------------------------------
 
-%% @doc NkActor ConfigMap Config
+%% @doc NkActor Cache
+%%
+%% Typically, we capture created and deleted events is callbacks to
+%% update target reference to us
+
 -module(nkactor_core_cache_actor).
 -author('Carlos Gonzalez <carlosj.gf@gmail.com>').
 
 -behavior(nkactor_actor).
 
--export([config/0, parse/3, init/2, sync_op/3, async_op/2, handle_info/2]).
+-export([find_by_target/2, get_infos/1, get_info/1]).
+-export([op_get_info/1, op_update/2]).
+-export([config/0, parse/3, init/2, get/2, sync_op/3, async_op/2, handle_info/2]).
+-import(nkserver_trace, [trace/1, log/3]).
 
 -include_lib("nkserver/include/nkserver.hrl").
 -include_lib("nkactor/include/nkactor.hrl").
 -include("nkactor_core.hrl").
 
 -define(DEFAULT_TTL, 60*60*1000).
+
+-type info() ::
+    #{
+        uid => nkactor:uid(),
+        class => binary(),
+        type := binary(),
+        meta => map()
+    }.
+
+
+%% ===================================================================
+%% Public
+%% ===================================================================
+
+%% @doc
+find_by_target(SrvId, TargetUID) ->
+    Opts = #{
+        namespace => <<>>,
+        deep => true,
+        link_type => ?LINK_TARGET_CACHE,
+        size => 1000
+    },
+    case nkactor:search_linked_to(SrvId, TargetUID, Opts) of
+        {ok, List} ->
+            {ok, [UID || {UID, _} <- List]};
+        {error, Error} ->
+            {error, Error}
+    end.
+
+
+%% @doc
+-spec get_infos([nkactor:uid()]) -> [info()].
+get_infos(UIDs) ->
+    get_infos(lists:sort(UIDs), []).
+
+
+%% @private
+get_infos([], Acc) ->
+    lists:reverse(Acc);
+
+get_infos([UID|Rest], Acc) ->
+    case op_get_info(UID) of
+        {ok, Info} ->
+            get_infos(Rest, [Info|Acc]);
+        {error, Error} ->
+            log(warning, "could not read cronjob ~s: ~p", [UID, Error]),
+            get_infos(Rest, Acc)
+    end.
+
+
+%% @doc
+get_info(#{uid:=UID, data:=#{spec:=Spec}}) ->
+    Info = maps:with([class, type, meta], Spec),
+    Info#{uid => UID}.
+
+
+%% @doc
+op_update(Id, Update) ->
+    nkactor:async_op(Id, {nkactor_update_cache, Update}).
+
+
+%% @doc
+op_get_info(Id) ->
+    nkactor:sync_op(Id, nkactor_get_info).
+
 
 %% ===================================================================
 %% Behaviour callbacks
@@ -54,7 +126,10 @@ parse(_Op, _Actor, _Req) ->
         target_group => binary,
         target_resource => binary,
         target_uid => binary,
-        ttl => pos_integer
+        ttl => pos_integer,
+        meta => map,
+        '__mandatory' => [class],
+        '__defaults' => #{meta => #{}}
     },
     {syntax, <<"v1a1">>, #{spec => Spec}}.
 
@@ -62,23 +137,35 @@ parse(_Op, _Actor, _Req) ->
 %% @private
 init(_, ActorSt) ->
     self() ! nkactor_load,
-    {ok, set_ttl(ActorSt#actor_st{run_state=#{ttl_timer=>undefined, data=>#{}}})}.
+    ActorSt2 = ActorSt#actor_st{run_state=#{ttl_timer=>undefined, data=>#{}}},
+    case do_link_target(ActorSt2) of
+        {ok, ActorSt3} ->
+            {ok, set_ttl(ActorSt3)};
+        {error, Error} ->
+            {error, Error}
+    end.
 
 
-%% @private
-sync_op(nkactor_get_cache, _From, #actor_st{run_state=RunState}=ActorSt) ->
-    {reply, {ok, maps:get(data, RunState)}, ActorSt};
+get(Actor, #actor_st{run_state = #{data:=Data}}=ActorSt) ->
+    {ok, Actor#{cache=>Data}, set_ttl(ActorSt)}.
 
-sync_op(_, _, _) ->
+
+%% @doc
+sync_op(nkactor_get_info, _From, #actor_st{actor=Actor}=ActorSt) ->
+    {reply, {ok, get_info(Actor)}, ActorSt};
+
+sync_op(_Op, _From, _ActorSt) ->
     continue.
 
 
 %% @private
-async_op({nkactor_update, Update}, ActorSt) ->
+async_op({nkactor_update_cache, Update}, ActorSt) ->
     #actor_st{srv=SrvId, actor=Actor, run_state=#{data:=Data}=RunState} = ActorSt,
-    case ?CALL_SRV(SrvId, actor_core_cache_update, [SrvId, Update, Data, Actor]) of
+    #{data:=#{spec:=#{class:=Class}}} = Actor,
+    case ?CALL_SRV(SrvId, actor_core_cache_update, [SrvId, Class, Update, Data, Actor]) of
         {ok, Data2} ->
-            {noreply, ActorSt#{run_state:=RunState#{data:=Data2}}};
+            ActorSt2 = ActorSt#actor_st{run_state=RunState#{data:=Data2}},
+            {noreply, set_ttl(ActorSt2)};
         {error, Error} ->
             {stop, Error, ActorSt}
     end;
@@ -89,9 +176,10 @@ async_op(_, _) ->
 
 %% @private
 handle_info(nkactor_load, #actor_st{srv=SrvId, run_state=RunState, actor=Actor}=ActorSt) ->
-    case ?CALL_SRV(SrvId, actor_core_cache_load, [SrvId, Actor]) of
+    #{data:=#{spec:=#{class:=Class}}} = Actor,
+    case ?CALL_SRV(SrvId, actor_core_cache_load, [SrvId, Class, Actor]) of
         {ok, Data2} ->
-            {noreply, ActorSt#{run_state:=RunState#{data:=Data2}}};
+            {noreply, ActorSt#actor_st{run_state=RunState#{data:=Data2}}};
         {error, Error} ->
             {stop, Error, ActorSt}
     end;
@@ -108,9 +196,33 @@ handle_info(_, _) ->
 %% ===================================================================
 
 
+%% @private
+do_link_target(#actor_st{actor=#{data:=#{spec:=Spec}}=Actor}=ActorSt) ->
+    case Spec of
+        #{target_group:=Group, target_resource:=Res, target_uid:=UID} ->
+            case nkactor_lib:add_checked_link(UID, Group, Res, Actor, ?LINK_TARGET_CACHE) of
+                {ok, _, Actor2} ->
+                    {ok, ActorSt#actor_st{actor=Actor2}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        #{target_uid:=UID} ->
+            case nkactor_lib:add_checked_link(UID, Actor, ?LINK_TARGET_CACHE) of
+                {ok, #actor_id{group=Group, resource=Res}, Actor2} ->
+                    #{data:=#{spec:=Spec2}=Data2} = Actor2,
+                    Spec3 = Spec2#{target_group=>Group, target_resource=>Res},
+                    Actor3 = Actor2#{data:=Data2#{spec:=Spec3}},
+                    {ok, ActorSt#actor_st{actor=Actor3}};
+                {error, Error} ->
+                    {error, Error}
+            end;
+        _ ->
+            {ok, ActorSt}
+    end.
+
 
 set_ttl(ActorSt) ->
-    #actor_st{actor=#{spec:=Spec}, run_state=#{ttl_timer:=Timer}=RunState} = ActorSt,
+    #actor_st{actor=#{data:=#{spec:=Spec}}, run_state=#{ttl_timer:=Timer}=RunState} = ActorSt,
     nklib_util:cancel_timer(Timer),
     TTL = maps:get(ttl, Spec, ?DEFAULT_TTL),
     Timer2 = erlang:send_after(TTL, self(), nkactor_expired),
