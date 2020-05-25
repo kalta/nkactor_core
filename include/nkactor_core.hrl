@@ -15,6 +15,7 @@
 -define(RES_CORE_USERS, <<"users">>).
 -define(RES_CORE_CONTACTS, <<"contacts">>).
 -define(RES_CORE_TOKENS, <<"tokens">>).
+-define(RES_CORE_CACHE, <<"cache">>).
 -define(RES_CORE_CONFIGMAPS, <<"configmaps">>).
 -define(RES_CORE_TASKS, <<"tasks">>).
 -define(RES_CORE_CRON_JOBS, <<"cronjobs">>).

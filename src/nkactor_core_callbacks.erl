@@ -24,6 +24,7 @@
 
 -export([status/1]).
 -export([actor_core_cronjobs_activate/4, actor_core_events_saved/2]).
+-export([actor_core_cache_load/2, actor_core_cache_update/4]).
 
 status(avatar_not_found)                    -> "Avatar is not found";
 status({email_duplicated, E})              -> {"Duplicated email '~s'", [E]};
@@ -62,3 +63,19 @@ actor_core_cronjobs_activate(_Class, _Type, _TargetUID, Actor) ->
 
 actor_core_events_saved(_SrvId, _Events) ->
     ok.
+
+
+%% @doc Called when a Cache Actor first loads, must return initial data
+-spec actor_core_cache_load(nkserver:id(), nkactor:actor()) ->
+    {ok, map()} | {error, Reason::term()} | continue | {continue, list()}.
+
+actor_core_cache_load(_SrvId, _Actor) ->
+    {ok, #{}}.
+
+
+%% @doc Called when a Cache Actor needs to be updated, must return new data
+-spec actor_core_cache_update(nkserver:id(), map(), map(), nkactor:actor()) ->
+    {ok, map()} | {error, Reason::term()} | continue | {continue, list()}.
+
+actor_core_cache_update(_SrvId, _Update, Data, _Actor) ->
+    {ok, Data}.
