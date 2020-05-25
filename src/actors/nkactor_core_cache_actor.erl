@@ -137,7 +137,7 @@ parse(_Op, _Actor, _Req) ->
 %% @private
 init(_, ActorSt) ->
     self() ! nkactor_load,
-    ActorSt2 = ActorSt#actor_st{run_state=#{ttl_timer=>undefined, data=>#{}}},
+    ActorSt2 = ActorSt#actor_st{run_state=#{ttl_timer=>undefined, data=>#{}, loaded_time=>0}},
     case do_link_target(ActorSt2) of
         {ok, ActorSt3} ->
             {ok, set_ttl(ActorSt3)};
@@ -146,8 +146,9 @@ init(_, ActorSt) ->
     end.
 
 
-get(Actor, #actor_st{run_state = #{data:=Data}}=ActorSt) ->
-    {ok, Actor#{cache=>Data}, set_ttl(ActorSt)}.
+get(Actor, #actor_st{run_state=RunState}=ActorSt) ->
+    Extra = maps:with([data, loaded_time], RunState),
+    {ok, Actor#{cache=>Extra}, set_ttl(ActorSt)}.
 
 
 %% @doc
@@ -179,7 +180,8 @@ handle_info(nkactor_load, #actor_st{srv=SrvId, run_state=RunState, actor=Actor}=
     #{data:=#{spec:=#{class:=Class}}} = Actor,
     case ?CALL_SRV(SrvId, actor_core_cache_load, [SrvId, Class, Actor]) of
         {ok, Data2} ->
-            {noreply, ActorSt#actor_st{run_state=RunState#{data:=Data2}}};
+            Now = nklib_date:epoch(msecs),
+            {noreply, ActorSt#actor_st{run_state=RunState#{data:=Data2, loaded_time:=Now}}};
         {error, Error} ->
             {stop, Error, ActorSt}
     end;
