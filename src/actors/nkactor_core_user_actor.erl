@@ -26,6 +26,7 @@
 
 -export([find_login/3, write_pass/2, has_role/3]).
 -export([op_check_pass/2, op_has_role/3, op_get_roles/1, op_add_role/4, op_del_role/3]).
+-export([op_set_external_id/3]).
 -export([config/0, parse/3, get/2, request/4, init/2, update/3, sync_op/3]).
 -export([store_pass/1]).
 
@@ -100,6 +101,9 @@ op_del_role(UserId, Role, Namespace) ->
     nkactor:sync_op(UserId, {nkactor_del_role, to_bin(Role), to_bin(Namespace)}).
 
 
+op_set_external_id(UserId, Name, Id) ->
+    nkactor:sync_op(UserId, {nkactor_set_external_id, Name, Id}).
+
 %% ===================================================================
 %% Behaviour callbacks
 %% ===================================================================
@@ -141,8 +145,8 @@ parse(_Op, _Actor, _Req) ->
             deep => boolean,
             '__mandatory' => [role],
             '__defaults' => #{namespace=><<>>, deep=>true}
-        }}
-
+        }},
+        external_ids => map
     },
     {syntax, <<"v1a1">>, #{spec=>Spec}}.
 
@@ -240,6 +244,17 @@ sync_op({nkactor_del_role, Role, Namespace}, _From, ActorSt) ->
             ActorSt
     end,
     {reply, ok, ActorSt2};
+
+sync_op({nkactor_set_external_id, Name, Value}, _From, ActorSt) ->
+    #actor_st{actor=#{data:=#{spec:=Spec}=Data}=Actor} = ActorSt,
+    ExtIds = maps:get(Spec, external_ids, #{}),
+    case maps:put(ExtIds, Name, Value) of
+        ExtIds ->
+            {reply, ok, ActorSt};
+        ExtIds2 ->
+            Actor2 = Actor#{data:=Data#{spec:=Spec#{external_ids => ExtIds2}}},
+            {reply_and_save, ok, ActorSt#actor_st{actor=Actor2}}
+    end;
 
 sync_op(_Op, _From, _ActorSt) ->
     continue.
