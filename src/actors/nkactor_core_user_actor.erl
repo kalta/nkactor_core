@@ -254,7 +254,7 @@ sync_op({nkactor_del_role, Role, Namespace}, _From, ActorSt) ->
 sync_op({nkactor_get_external_id, Name}, _From, ActorSt) ->
     #actor_st{actor=#{data:=#{spec:=Spec}}} = ActorSt,
     ExtIds = maps:get(external_ids, Spec, #{}),
-    {reply, {ok, maps:get(Name, ExtIds)}, ActorSt};
+    {reply, {ok, maps:get(Name, ExtIds, undefined)}, ActorSt};
 
 sync_op({nkactor_set_external_id, Name, Value}, _From, ActorSt) ->
     #actor_st{actor=#{data:=#{spec:=Spec}=Data}=Actor} = ActorSt,
