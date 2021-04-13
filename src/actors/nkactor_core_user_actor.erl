@@ -253,7 +253,7 @@ sync_op({nkactor_set_external_id, Name, Value}, _From, ActorSt) ->
     Value2 = to_bin(Value),
     #actor_st{actor=#{data:=#{spec:=Spec}=Data}=Actor} = ActorSt,
     ExtIds = maps:get(external_ids, Spec, #{}),
-    case maps:put(ExtIds, Name2, Value2) of
+    case maps:put(Name2, ExtIds, Value2) of
         ExtIds ->
             {reply, ok, ActorSt};
         ExtIds2 ->
