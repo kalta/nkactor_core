@@ -338,17 +338,22 @@ remove_old_hashes(Secs) ->
 
 %% @private
 do_save(SrvId, Actors, Tries) when Tries > 0 ->
-	nkserver_trace:trace("calling events actor_db_update"),
-	case ?CALL_SRV(SrvId, actor_db_create, [SrvId, Actors, #{}]) of
-		{ok, _Meta} ->
-			?CALL_SRV(SrvId, actor_core_events_saved, [SrvId, Actors]),
-			nkserver_trace:trace("events saved"),
-			ok;
-		{error, Error} ->
-			nkserver_trace:log(warning, "could not save events: ~p (~p tries left)", [Error, Tries]),
-			timer:sleep(?RETRY_WAIT_TIME),
-			do_save(SrvId, Actors, Tries-1)
-	end;
+	?CALL_SRV(SrvId, actor_core_events_saved, [SrvId, Actors]),
+	ok;
+
+%%%% @private
+%%do_save(SrvId, Actors, Tries) when Tries > 0 ->
+%%	nkserver_trace:trace("calling events actor_db_update"),
+%%	case ?CALL_SRV(SrvId, actor_db_create, [SrvId, Actors, #{}]) of
+%%		{ok, _Meta} ->
+%%			?CALL_SRV(SrvId, actor_core_events_saved, [SrvId, Actors]),
+%%			nkserver_trace:trace("events saved"),
+%%			ok;
+%%		{error, Error} ->
+%%			nkserver_trace:log(warning, "could not save events: ~p (~p tries left)", [Error, Tries]),
+%%			timer:sleep(?RETRY_WAIT_TIME),
+%%			do_save(SrvId, Actors, Tries-1)
+%%	end;
 
 do_save(_SrvId, _Actors, _Tries) ->
 	error.
